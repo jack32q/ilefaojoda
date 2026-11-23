@@ -1,0 +1,2923 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>ILEFAO JODA !</title>
+    <!-- Tailwind CSS pour l'interface adaptative et fluide -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                        arcade: ['Fredoka', 'Inter', 'sans-serif']
+                    }
+                }
+            }
+        };
+    </script>
+    <!-- Polices typographiques -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+    <!-- Three.js r128 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: 'Inter', sans-serif;
+        }
+
+        #game-canvas {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+            z-index: 0;
+        }
+
+        .hud-panel {
+            background: rgba(255, 255, 255, 0.84);
+            color: #0f172a;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(15, 23, 42, 0.14);
+        }
+
+        .dark .hud-panel {
+            background: rgba(15, 23, 42, 0.74);
+            color: #f8fafc;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+        }
+
+        .action-btn {
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.08));
+            backdrop-filter: blur(8px);
+            border: 2px solid rgba(255, 255, 255, 0.45);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35), inset 0 2px 4px rgba(255, 255, 255, 0.35);
+            transition: transform 0.1s ease, background 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .action-btn:active, .action-btn.active {
+            transform: scale(0.92);
+            background: linear-gradient(145deg, rgba(251, 191, 36, 0.58), rgba(234, 88, 12, 0.48));
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
+        }
+
+        @keyframes pulseDanger {
+            0%, 100% { opacity: 0.16; }
+            50% { opacity: 0.48; }
+        }
+
+        .danger-vignette {
+            animation: pulseDanger 0.7s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-900 dark:bg-gray-950 dark:text-white transition-colors duration-200">
+    <!-- Canvas 3D principal -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Vignette de proximité dangereuse de Joda -->
+    <div id="danger-overlay" class="fixed inset-0 pointer-events-none z-10 opacity-0 transition-opacity duration-200 danger-vignette"
+         style="background: radial-gradient(circle, transparent 52%, rgba(220, 38, 38, 0.68) 100%);"></div>
+
+    <!-- Interface HUD en jeu -->
+    <div id="hud" class="fixed inset-0 pointer-events-none z-20 flex flex-col justify-between p-3 sm:p-5 hidden">
+        <!-- Barre supérieure -->
+        <div class="flex flex-wrap items-start justify-between gap-2 sm:gap-4">
+            <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                <!-- Compteurs : Niveaux réussis, Niveau actuel (1..500) et Étoiles -->
+                <div class="hud-panel rounded-2xl px-4 py-2.5 flex items-center gap-4 shadow-lg">
+                    <div>
+                        <div class="text-[11px] uppercase tracking-wider opacity-70 font-bold">Pièges</div>
+                        <div id="hud-score" class="font-arcade text-2xl sm:text-3xl font-bold text-amber-500 dark:text-amber-400 leading-none">0</div>
+                    </div>
+                    <div class="h-8 w-px bg-current opacity-15"></div>
+                    <div>
+                        <div class="text-[11px] uppercase tracking-wider opacity-70 font-bold">Niveau</div>
+                        <div id="hud-level" class="font-arcade text-2xl sm:text-3xl font-bold text-emerald-600 dark:text-emerald-400 leading-none">1<span class="text-xs opacity-65">/500</span></div>
+                    </div>
+                    <div class="h-8 w-px bg-current opacity-15"></div>
+                    <div>
+                        <div class="text-[11px] uppercase tracking-wider opacity-70 font-bold">Étoiles</div>
+                        <div id="hud-stars" class="font-arcade text-2xl sm:text-3xl font-bold text-yellow-500 dark:text-yellow-300 leading-none">⭐ 0</div>
+                    </div>
+                </div>
+
+                <!-- Jauge d'endurance Sprint, Chrono, Bananes et Appels Joda -->
+                <div class="hud-panel rounded-xl px-3.5 py-2 shadow-lg w-56 sm:w-64">
+                    <div class="flex justify-between text-[11px] font-bold uppercase tracking-wider mb-1">
+                        <span class="text-sky-600 dark:text-sky-300">⚡ Sprint</span>
+                        <span id="hud-stamina-text" class="opacity-80">100%</span>
+                    </div>
+                    <div class="w-full h-2.5 bg-slate-300 dark:bg-gray-800 rounded-full overflow-hidden border border-black/10 dark:border-white/10">
+                        <div id="hud-stamina-bar" class="h-full bg-gradient-to-r from-sky-400 to-indigo-500 rounded-full transition-all duration-75" style="width: 100%;"></div>
+                    </div>
+                    <div class="flex justify-between items-center text-[11px] font-bold mt-1.5 opacity-90 gap-2">
+                        <span>⏱️ <span id="hud-timer">0.0s</span></span>
+                        <span>🍌 <span id="hud-bananas">0</span></span>
+                        <span class="text-orange-500 dark:text-orange-300">📣 <span id="hud-calls">20</span>/20</span>
+                    </div>
+                </div>
+
+                <!-- Boutons rapides : Appel Joda, Boutique, Thème, Son, Pause, Recommencer -->
+                <div class="pointer-events-auto flex flex-wrap items-center gap-2">
+                    <button id="btn-call-joda" class="hud-panel hover:opacity-90 rounded-xl px-3 py-2 text-xs sm:text-sm font-bold flex items-center gap-1.5 text-orange-600 dark:text-orange-300 border-orange-400/50 shadow transition cursor-pointer" title="Attirer Joda vers toi (Touche C — 20 charges)">
+                        <span>📣</span><span>Appel Joda</span><span id="btn-call-badge" class="font-arcade px-1.5 py-0.5 rounded bg-orange-500/20 text-xs">20</span>
+                    </button>
+                    <button id="btn-shop-hud" class="hud-panel hover:opacity-90 rounded-xl px-3 py-2 text-xs sm:text-sm font-bold flex items-center gap-1 text-yellow-600 dark:text-yellow-300 shadow transition cursor-pointer" title="Boutique Étoiles">
+                        <span>🌟</span><span>Boutique</span>
+                    </button>
+                    <button id="btn-theme-hud" class="hud-panel hover:opacity-90 rounded-xl p-2.5 text-sm font-bold flex items-center gap-1 shadow transition cursor-pointer" title="Mode Clair / Sombre">
+                        <span id="theme-icon-hud">☀️</span>
+                    </button>
+                    <button id="btn-mute" class="hud-panel hover:opacity-90 rounded-xl p-2.5 text-sm font-bold flex items-center gap-1 shadow transition cursor-pointer" title="Activer/Couper le son">
+                        <span id="mute-icon">🔊</span>
+                    </button>
+                    <button id="btn-pause" class="hud-panel hover:opacity-90 rounded-xl px-3 py-2 text-xs sm:text-sm font-bold flex items-center gap-1 shadow transition cursor-pointer" title="Pause">
+                        <span>⏸️</span><span class="hidden sm:inline">Pause</span>
+                    </button>
+                    <button id="btn-restart-hud" class="hud-panel hover:opacity-90 rounded-xl px-3 py-2 text-xs sm:text-sm font-bold flex items-center gap-1 text-amber-600 dark:text-amber-400 shadow transition cursor-pointer" title="Recommencer la partie">
+                        <span>🔄</span><span class="hidden sm:inline">Recommencer</span>
+                    </button>
+                </div>
+
+                <div class="hud-panel rounded-xl px-3 py-1.5 text-xs opacity-85 hidden xl:block">
+                    ZQSD/Flèches : Courir • Espace : Sauter • Shift : Sprint • F/E : Porte Maison • B : Banane • C : Appel Joda • Souris : Caméra
+                </div>
+            </div>
+
+            <!-- Rappel du piège actif (sans indice visuel de position pour le trou caché) -->
+            <div id="hud-trap-card" class="hud-panel rounded-2xl px-3.5 py-2.5 text-right shadow-lg max-w-[225px] sm:max-w-[260px]">
+                <div id="hud-trap-title" class="text-[11px] uppercase tracking-wider font-extrabold text-amber-500 dark:text-amber-400">
+                    🕳️ PIÈGE ACTIF
+                </div>
+                <div id="hud-trap-desc" class="text-[11px] sm:text-xs opacity-85 mt-0.5 leading-snug">
+                    Piège Joda dans l'unique trou caché sans tomber dedans !
+                </div>
+            </div>
+        </div>
+
+        <!-- Bannière de notification en jeu -->
+        <div id="toast-banner" class="self-center hud-panel border-amber-400/50 rounded-2xl px-6 py-3 text-center transform -translate-y-4 opacity-0 transition-all duration-300 pointer-events-none shadow-2xl">
+            <div id="toast-title" class="font-arcade text-xl sm:text-2xl font-bold text-amber-500 dark:text-amber-400">LEVEL 1 FINI !</div>
+            <div id="toast-stars" class="font-arcade text-lg sm:text-xl font-bold text-yellow-500 dark:text-yellow-300 mt-0.5">⭐⭐⭐</div>
+            <div id="toast-sub" class="text-xs sm:text-sm opacity-85 mt-0.5">Niveau suivant !</div>
+        </div>
+
+        <!-- Contrôles Tactiles (Joystick à gauche + Boutons d'Action à droite) -->
+        <div id="touch-controls" class="flex items-end justify-between w-full pb-2 sm:pb-4">
+            <div id="joystick-zone" class="pointer-events-auto relative w-32 h-32 sm:w-36 sm:h-36 rounded-full bg-slate-900/35 dark:bg-white/10 border-2 border-white/35 backdrop-blur-sm flex items-center justify-center">
+                <div id="joystick-knob" class="w-14 h-14 rounded-full bg-white/90 shadow-lg border-2 border-white pointer-events-none transform translate-x-0 translate-y-0"></div>
+            </div>
+
+            <div class="pointer-events-auto flex flex-wrap justify-end items-end gap-2.5 sm:gap-3.5 max-w-[68%]">
+                <button id="btn-touch-call" class="action-btn w-15 h-15 sm:w-16 sm:h-16 rounded-full flex flex-col items-center justify-center text-orange-300 font-bold">
+                    <span class="text-lg sm:text-xl">📣</span>
+                    <span class="text-[9px] uppercase tracking-wider mt-0.5">Appel <span id="touch-call-count">20</span></span>
+                </button>
+                <button id="btn-touch-banana" class="action-btn w-15 h-15 sm:w-16 sm:h-16 rounded-full flex flex-col items-center justify-center text-yellow-300 font-bold">
+                    <span class="text-lg sm:text-xl">🍌</span>
+                    <span class="text-[9px] uppercase tracking-wider mt-0.5">Banane</span>
+                </button>
+                <button id="btn-touch-door" class="action-btn w-15 h-15 sm:w-16 sm:h-16 rounded-full flex flex-col items-center justify-center text-amber-300 font-bold">
+                    <span class="text-lg sm:text-xl">🚪</span>
+                    <span class="text-[9px] uppercase tracking-wider mt-0.5">Porte</span>
+                </button>
+                <button id="btn-touch-sprint" class="action-btn w-16 h-16 sm:w-18 sm:h-18 rounded-full flex flex-col items-center justify-center text-sky-300 font-bold">
+                    <span class="text-xl sm:text-2xl">⚡</span>
+                    <span class="text-[10px] uppercase tracking-wider mt-0.5">Sprint</span>
+                </button>
+                <button id="btn-touch-jump" class="action-btn w-18 h-18 sm:w-20 sm:h-20 rounded-full flex flex-col items-center justify-center text-emerald-300 font-bold">
+                    <span class="text-2xl">⬆️</span>
+                    <span class="text-[10px] uppercase tracking-wider mt-0.5">Sauter</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Menu Pause -->
+    <div id="pause-screen" class="fixed inset-0 z-30 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-md hidden">
+        <div class="hud-panel max-w-sm w-full rounded-3xl p-6 sm:p-7 shadow-2xl text-center">
+            <div class="text-5xl mb-2">⏸️</div>
+            <h2 class="font-arcade text-3xl font-bold text-amber-500 dark:text-amber-400">JEU EN PAUSE</h2>
+            <p class="text-sm opacity-80 mt-2">Joda patrouille dans les rues en attendant ta prochaine fuite...</p>
+            <div class="flex flex-col gap-3 mt-6">
+                <button id="btn-resume" class="w-full py-3.5 px-5 rounded-2xl font-arcade text-lg font-bold text-slate-950 bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-300 hover:to-teal-400 shadow-lg cursor-pointer">
+                    ▶️ REPRENDRE
+                </button>
+                <button id="btn-shop-pause" class="w-full py-3 px-5 rounded-2xl font-arcade text-base font-bold text-slate-950 bg-gradient-to-r from-yellow-300 to-amber-500 hover:from-yellow-200 hover:to-amber-400 shadow cursor-pointer">
+                    🌟 BOUTIQUE D'ÉTOILES
+                </button>
+                <button id="btn-pause-restart" class="w-full py-3 px-5 rounded-2xl font-arcade text-base font-bold border border-current/20 hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer">
+                    🔄 RECOMMENCER
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Boutique d'Étoiles -->
+    <div id="shop-modal" class="fixed inset-0 z-40 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md hidden">
+        <div class="hud-panel max-w-md w-full rounded-3xl p-6 shadow-2xl text-left">
+            <div class="flex items-center justify-between border-b border-current/15 pb-3">
+                <div>
+                    <h3 class="font-arcade text-2xl font-bold text-yellow-500 dark:text-yellow-300">🌟 BOUTIQUE D'ÉTOILES</h3>
+                    <p class="text-xs opacity-75">Améliore ton sprint ou achète des peaux de banane (1 ⭐)</p>
+                </div>
+                <div class="rounded-2xl px-3.5 py-1.5 bg-yellow-500/15 border border-yellow-400/40 font-arcade text-lg font-bold text-yellow-500 dark:text-yellow-300">
+                    ⭐ <span id="shop-stars-count">0</span>
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-3.5 my-5">
+                <div class="rounded-2xl p-4 bg-black/5 dark:bg-white/5 border border-current/10 flex items-center justify-between gap-3">
+                    <div>
+                        <div class="font-bold text-sm sm:text-base flex items-center gap-1.5">
+                            <span>⚡ Vitesse de Sprint</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-600 dark:text-sky-300 font-arcade">Niv. <span id="shop-sprint-lvl">0</span>/15</span>
+                        </div>
+                        <p class="text-xs opacity-80 mt-0.5">Augmente la vitesse de sprint pour distancer un Joda de plus en plus rapide.</p>
+                    </div>
+                    <button id="btn-buy-sprint" class="shrink-0 py-2.5 px-3.5 rounded-xl font-arcade text-sm font-bold text-slate-950 bg-gradient-to-r from-sky-400 to-indigo-400 hover:from-sky-300 hover:to-indigo-300 shadow cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                        ⭐ <span id="shop-sprint-cost">2</span>
+                    </button>
+                </div>
+
+                <div class="rounded-2xl p-4 bg-black/5 dark:bg-white/5 border border-current/10 flex items-center justify-between gap-3">
+                    <div>
+                        <div class="font-bold text-sm sm:text-base flex items-center gap-1.5">
+                            <span>🍌 Peau de Banane</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-300 font-arcade">Stock : <span id="shop-banana-stock">0</span></span>
+                        </div>
+                        <p class="text-xs opacity-80 mt-0.5">Pose-la (touche <strong>B</strong> ou bouton) pour faire glisser Joda et le ralentir.</p>
+                    </div>
+                    <button id="btn-buy-banana" class="shrink-0 py-2.5 px-3.5 rounded-xl font-arcade text-sm font-bold text-slate-950 bg-gradient-to-r from-yellow-300 to-amber-500 hover:from-yellow-200 hover:to-amber-400 shadow cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">
+                        ⭐ 1
+                    </button>
+                </div>
+            </div>
+
+            <button id="btn-close-shop" class="w-full py-3 px-4 rounded-2xl font-arcade text-base font-bold border border-current/20 hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer">
+                FERMER LA BOUTIQUE
+            </button>
+        </div>
+    </div>
+
+    <!-- Confirmation avant de recommencer une partie en cours -->
+    <div id="confirm-restart-modal" class="fixed inset-0 z-40 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md hidden">
+        <div class="hud-panel max-w-sm w-full rounded-3xl p-6 shadow-2xl text-center">
+            <div class="text-4xl mb-2">🔄</div>
+            <h3 class="font-arcade text-2xl font-bold text-amber-500 dark:text-amber-400">RECOMMENCER ?</h3>
+            <p class="text-sm opacity-80 mt-2">
+                La partie en cours et le niveau actuel seront réinitialisés. Confirmer le redémarrage ?
+            </p>
+            <div class="flex gap-3 mt-6">
+                <button id="btn-cancel-restart" class="flex-1 py-3 px-4 rounded-2xl font-arcade text-base font-bold border border-current/20 hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer">
+                    ANNULER
+                </button>
+                <button id="btn-confirm-restart" class="flex-1 py-3 px-4 rounded-2xl font-arcade text-base font-bold text-slate-950 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 shadow-lg cursor-pointer">
+                    CONFIRMER
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Écran d'Accueil -->
+    <div id="start-screen" class="fixed inset-0 z-30 flex items-center justify-center p-4 bg-slate-950/65 backdrop-blur-sm">
+        <div class="hud-panel relative max-w-lg w-full rounded-3xl p-6 sm:p-8 text-center shadow-2xl">
+            <button id="btn-theme-start" class="absolute top-4 right-4 rounded-xl px-3 py-2 text-xs font-bold border border-current/15 hover:opacity-85 cursor-pointer flex items-center gap-1.5" title="Changer le thème">
+                <span id="theme-icon-start">☀️</span>
+                <span id="theme-label-start">Clair</span>
+            </button>
+            <button id="btn-shop-start" class="absolute top-4 left-4 rounded-xl px-3 py-2 text-xs font-bold border border-yellow-400/40 bg-yellow-500/15 text-yellow-600 dark:text-yellow-300 hover:opacity-85 cursor-pointer flex items-center gap-1" title="Boutique Étoiles">
+                <span>🌟</span><span>Boutique</span>
+            </button>
+
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-red-500/20 border border-red-400/40 text-4xl mb-3 shadow-inner mt-4">
+                🏃‍♂️💨💩
+            </div>
+            <h1 class="font-arcade text-3xl sm:text-5xl font-bold bg-gradient-to-r from-red-500 via-amber-400 to-orange-500 bg-clip-text text-transparent">
+                ILEFAO JODA !
+            </h1>
+            <p class="opacity-90 text-sm sm:text-base mt-2.5 leading-relaxed font-medium">
+                500 niveaux de course-poursuite urbaine ! Échappe à <strong>Joda</strong> qui te lance des crottes en spirale — ne te fais pas toucher !
+            </p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 my-5 text-left">
+                <div class="rounded-2xl p-3 bg-black/5 dark:bg-white/5 border border-current/10">
+                    <div class="text-xl mb-1">🕳️ 1 Trou Caché</div>
+                    <p class="text-xs opacity-80">Sans radar ni marqueur : trouve le trou caché et attire Joda dedans sans tomber.</p>
+                </div>
+                <div class="rounded-2xl p-3 bg-black/5 dark:bg-white/5 border border-current/10">
+                    <div class="text-xl mb-1">🏠 Grande Maison</div>
+                    <p class="text-xs opacity-80">Toit transparent à l'intérieur : attire Joda dedans, sors et ferme la porte (F/E).</p>
+                </div>
+                <div class="rounded-2xl p-3 bg-black/5 dark:bg-white/5 border border-current/10">
+                    <div class="text-xl mb-1">📣 20 Appels & ⭐</div>
+                    <p class="text-xs opacity-80">Attire Joda (C), gagne 1 à 3 ⭐ par niveau et améliore sprint & bananes.</p>
+                </div>
+            </div>
+
+            <div class="rounded-2xl p-3 mb-6 text-xs opacity-85 flex flex-wrap justify-center gap-x-4 gap-y-1.5 bg-black/5 dark:bg-white/5 border border-current/10">
+                <span><strong>ZQSD / Flèches :</strong> Courir</span>
+                <span><strong>Espace :</strong> Sauter</span>
+                <span><strong>Shift :</strong> Sprint</span>
+                <span><strong>F / E :</strong> Porte Maison</span>
+                <span><strong>B :</strong> Banane</span>
+                <span><strong>C :</strong> Appel Joda (20)</span>
+                <span><strong>Souris :</strong> Caméra</span>
+            </div>
+
+            <button id="btn-start" class="w-full py-4 px-6 rounded-2xl font-arcade text-xl sm:text-2xl font-bold text-slate-950 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 shadow-lg shadow-orange-500/30 transform transition active:scale-95 cursor-pointer">
+                COMMENCER — ILEFAO JODA !
+            </button>
+        </div>
+    </div>
+
+    <!-- Écran Game Over -->
+    <div id="gameover-screen" class="fixed inset-0 z-30 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md hidden">
+        <div class="hud-panel max-w-md w-full rounded-3xl p-6 sm:p-8 text-center shadow-2xl">
+            <div id="gameover-emoji" class="text-6xl mb-2">💩💥</div>
+            <h2 class="font-arcade text-3xl sm:text-4xl font-bold text-red-500 dark:text-red-400">GAME OVER</h2>
+            <p id="gameover-reason" class="opacity-85 text-sm sm:text-base mt-2">
+                Joda t'a touché avec une crotte !
+            </p>
+
+            <div class="grid grid-cols-2 gap-3 my-6">
+                <div class="rounded-2xl p-4 bg-black/5 dark:bg-white/5 border border-current/10">
+                    <div class="text-xs uppercase opacity-70 font-bold">Niveau Atteint</div>
+                    <div id="final-score" class="font-arcade text-3xl font-bold text-amber-500 dark:text-amber-400 mt-1">1/500</div>
+                </div>
+                <div class="rounded-2xl p-4 bg-black/5 dark:bg-white/5 border border-current/10">
+                    <div class="text-xs uppercase opacity-70 font-bold">Étoiles Totales</div>
+                    <div id="best-score" class="font-arcade text-3xl font-bold text-yellow-500 dark:text-yellow-300 mt-1">⭐ 0</div>
+                </div>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-3">
+                <button id="btn-shop-gameover" class="flex-1 py-3.5 px-4 rounded-2xl font-arcade text-lg font-bold text-slate-950 bg-gradient-to-r from-yellow-300 to-amber-500 hover:from-yellow-200 hover:to-amber-400 shadow cursor-pointer">
+                    🌟 BOUTIQUE
+                </button>
+                <button id="btn-restart" class="flex-1 py-4 px-6 rounded-2xl font-arcade text-xl font-bold text-white bg-gradient-to-r from-red-500 to-orange-600 hover:from-red-400 hover:to-orange-500 shadow-lg shadow-red-600/30 transform transition active:scale-95 cursor-pointer">
+                    🔄 RECOMMENCER
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * ============================================================================
+         * SYNTHÉTISEUR AUDIO WEB AUDIO API (SANS FICHIERS EXTERNES)
+         * ============================================================================
+         */
+        class SoundEffects {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+
+            init() {
+                try {
+                    if (!this.ctx) {
+                        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                        this.ctx = new AudioCtx();
+                    }
+                    if (this.ctx.state === 'suspended') {
+                        this.ctx.resume();
+                    }
+                } catch (err) {
+                    console.warn('Web Audio indisponible :', err);
+                }
+            }
+
+            toggleMute() {
+                this.muted = !this.muted;
+                return this.muted;
+            }
+
+            playJump() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(220, now);
+                osc.frequency.exponentialRampToValueAtTime(540, now + 0.16);
+                gain.gain.setValueAtTime(0.18, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.19);
+            }
+
+            playStep() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(92 + Math.random() * 24, now);
+                osc.frequency.exponentialRampToValueAtTime(44, now + 0.05);
+                gain.gain.setValueAtTime(0.045, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.055);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.06);
+            }
+
+            playThrow() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(360, now);
+                osc.frequency.exponentialRampToValueAtTime(135, now + 0.15);
+                gain.gain.setValueAtTime(0.11, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.17);
+            }
+
+            playSplat() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const bufferSize = Math.floor(this.ctx.sampleRate * 0.18);
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.35));
+                }
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(880, now);
+                filter.frequency.exponentialRampToValueAtTime(170, now + 0.18);
+
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.28, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.18);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+                noise.start(now);
+            }
+
+            playCallJoda() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.setValueAtTime(660, now + 0.09);
+                gain.gain.setValueAtTime(0.14, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            }
+
+            playLevelWin() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const notes = [523.25, 659.25, 783.99, 1046.50];
+                notes.forEach((freq, idx) => {
+                    const o = this.ctx.createOscillator();
+                    const g = this.ctx.createGain();
+                    o.type = 'triangle';
+                    o.frequency.setValueAtTime(freq, now + idx * 0.075);
+                    g.gain.setValueAtTime(0.16, now + idx * 0.075);
+                    g.gain.exponentialRampToValueAtTime(0.001, now + 0.45 + idx * 0.075);
+                    o.connect(g);
+                    g.connect(this.ctx.destination);
+                    o.start(now + idx * 0.075);
+                    o.stop(now + 0.5 + idx * 0.075);
+                });
+            }
+
+            playBananaSlip() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(680, now);
+                osc.frequency.exponentialRampToValueAtTime(190, now + 0.25);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.26);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.27);
+            }
+
+            playDoorSlam() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(160, now);
+                osc.frequency.exponentialRampToValueAtTime(42, now + 0.16);
+                gain.gain.setValueAtTime(0.24, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.18);
+            }
+
+            playGameOver() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                const notes = [392.0, 349.23, 311.13, 220.0];
+                notes.forEach((freq, i) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(freq, now + i * 0.14);
+                    gain.gain.setValueAtTime(0.14, now + i * 0.14);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.14 + 0.22);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + i * 0.14);
+                    osc.stop(now + i * 0.14 + 0.24);
+                });
+            }
+        }
+
+        const sfx = new SoundEffects();
+
+        /**
+         * ============================================================================
+         * GÉNÉRATEUR DE TEXTURES PROCÉDURALE (CANVAS HORS-ÉCRAN -> PBR THREE.JS)
+         * ============================================================================
+         */
+        function createAsphaltTexture() {
+            const c = document.createElement('canvas');
+            c.width = 512;
+            c.height = 512;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = '#2d3748';
+            ctx.fillRect(0, 0, 512, 512);
+
+            for (let i = 0; i < 9000; i++) {
+                const x = Math.random() * 512;
+                const y = Math.random() * 512;
+                const v = 32 + Math.floor(Math.random() * 38);
+                ctx.fillStyle = `rgb(${v},${v + 4},${v + 10})`;
+                ctx.fillRect(x, y, 2, 2);
+            }
+
+            // Légères fissures et traces d'usure
+            ctx.strokeStyle = 'rgba(15, 23, 42, 0.45)';
+            ctx.lineWidth = 1.5;
+            for (let f = 0; f < 14; f++) {
+                ctx.beginPath();
+                let fx = Math.random() * 512;
+                let fy = Math.random() * 512;
+                ctx.moveTo(fx, fy);
+                for (let s = 0; s < 5; s++) {
+                    fx += (Math.random() - 0.5) * 35;
+                    fy += (Math.random() - 0.5) * 35;
+                    ctx.lineTo(fx, fy);
+                }
+                ctx.stroke();
+            }
+
+            const tex = new THREE.CanvasTexture(c);
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(16, 16);
+            return tex;
+        }
+
+        function createSidewalkTexture() {
+            const c = document.createElement('canvas');
+            c.width = 256;
+            c.height = 256;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillRect(0, 0, 256, 256);
+
+            for (let i = 0; i < 2500; i++) {
+                const x = Math.random() * 256;
+                const y = Math.random() * 256;
+                const v = 135 + Math.floor(Math.random() * 35);
+                ctx.fillStyle = `rgb(${v},${v + 4},${v + 10})`;
+                ctx.fillRect(x, y, 2, 2);
+            }
+
+            ctx.strokeStyle = 'rgba(30, 41, 59, 0.35)';
+            ctx.lineWidth = 2;
+            const step = 64;
+            for (let g = 0; g <= 256; g += step) {
+                ctx.beginPath();
+                ctx.moveTo(g, 0);
+                ctx.lineTo(g, 256);
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(0, g);
+                ctx.lineTo(256, g);
+                ctx.stroke();
+            }
+
+            const tex = new THREE.CanvasTexture(c);
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(8, 8);
+            return tex;
+        }
+
+        function createBuildingFacadeTexture(baseHex, litWindows = true) {
+            const c = document.createElement('canvas');
+            c.width = 256;
+            c.height = 512;
+            const ctx = c.getContext('2d');
+
+            const baseCol = new THREE.Color(baseHex);
+            ctx.fillStyle = `#${baseCol.getHexString()}`;
+            ctx.fillRect(0, 0, 256, 512);
+
+            // Briques / crépi subtil
+            ctx.fillStyle = 'rgba(0,0,0,0.08)';
+            for (let y = 0; y < 512; y += 16) {
+                ctx.fillRect(0, y, 256, 2);
+            }
+
+            // Fenêtres réalistes avec reflets et intérieurs
+            const cols = 4;
+            const rows = 8;
+            const padX = 22;
+            const padY = 24;
+            const cellW = (256 - padX * (cols + 1)) / cols;
+            const cellH = (512 - padY * (rows + 1)) / rows;
+
+            for (let r = 0; r < rows; r++) {
+                for (let cl = 0; cl < cols; cl++) {
+                    const wx = padX + cl * (cellW + padX);
+                    const wy = padY + r * (cellH + padY);
+                    const isLit = litWindows && Math.random() > 0.42;
+
+                    ctx.fillStyle = isLit ? '#fef08a' : '#1e293b';
+                    ctx.fillRect(wx, wy, cellW, cellH);
+
+                    // Reflet diagonal sur vitre
+                    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+                    ctx.beginPath();
+                    ctx.moveTo(wx, wy);
+                    ctx.lineTo(wx + cellW * 0.55, wy);
+                    ctx.lineTo(wx, wy + cellH * 0.55);
+                    ctx.closePath();
+                    ctx.fill();
+
+                    // Encadrement de fenêtre
+                    ctx.strokeStyle = '#334155';
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(wx, wy, cellW, cellH);
+                }
+            }
+
+            const tex = new THREE.CanvasTexture(c);
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.ClampToEdgeWrapping;
+            return tex;
+        }
+
+        function createClothTexture(baseHex, weaveColor = 'rgba(255,255,255,0.08)') {
+            const c = document.createElement('canvas');
+            c.width = 128;
+            c.height = 128;
+            const ctx = c.getContext('2d');
+            const col = new THREE.Color(baseHex);
+            ctx.fillStyle = `#${col.getHexString()}`;
+            ctx.fillRect(0, 0, 128, 128);
+
+            ctx.fillStyle = weaveColor;
+            for (let y = 0; y < 128; y += 4) {
+                for (let x = 0; x < 128; x += 4) {
+                    if (((x + y) / 4) % 2 === 0) {
+                        ctx.fillRect(x, y, 2, 2);
+                    }
+                }
+            }
+
+            const tex = new THREE.CanvasTexture(c);
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(2, 2);
+            return tex;
+        }
+
+        /**
+         * ============================================================================
+         * CONFIGURATION & ÉTAT GLOBAL (ILEFAO JODA !)
+         * ============================================================================
+         */
+        const CITY_HALF_SIZE = 108;
+        const MAX_LEVELS = 500;
+        const ROAM_DISTANCE = 36;
+        const GRAVITY = -34;
+        const JUMP_FORCE = 14.5;
+        const MAX_JODA_CALLS = 20;
+
+        let scene, camera, renderer;
+        let clock = new THREE.Clock();
+
+        let gameState = 'START'; // 'START', 'PLAYING', 'PAUSED', 'GAMEOVER'
+        let stateBeforeConfirm = 'PLAYING';
+        let stateBeforeShop = 'START';
+        let isDarkMode = true;
+
+        let score = 0;
+        let level = 1;
+        let levelElapsed = 0;
+        let activeTrapType = 'HOLE'; // 'HOLE' ou 'HOUSE'
+
+        // 20 charges d'Appel à Joda par partie
+        let jodaCallsRemaining = MAX_JODA_CALLS;
+        let jodaCallTimer = 0;
+
+        // Sauvegarde persistante (localStorage)
+        let starsBalance = parseInt(localStorage.getItem('ilefao_joda_stars') || '0', 10);
+        let sprintUpgradeLevel = parseInt(localStorage.getItem('ilefao_joda_sprint_lvl') || '0', 10);
+        let bananaPeelCount = parseInt(localStorage.getItem('ilefao_joda_bananas') || '2', 10);
+
+        // Entités & Collections
+        let player = null;
+        let chaser = null;
+        let obstacles = [];
+        let cityGraph = { nodes: [], edges: [] };
+        let trapHouse = null;
+        let traps = [];
+        let bananaPeels = [];
+        let projectiles = [];
+        let particles = [];
+
+        // Contrôles Joueur
+        const keys = {
+            forward: false,
+            backward: false,
+            left: false,
+            right: false,
+            sprint: false
+        };
+        let touchMove = { x: 0, y: 0 };
+        let touchSprint = false;
+
+        // Caméra 3ème personne
+        let cameraYaw = 0;
+        let cameraPitch = 0.42;
+        const cameraDistance = 11.5;
+        let isDraggingCamera = false;
+        let lastPointerX = 0;
+        let lastPointerY = 0;
+        let activeCameraTouchId = null;
+
+        // Lumières & Sol
+        let ambientLight, dirLight, hemiLight, groundMesh;
+        let asphaltTex, sidewalkTex;
+
+        // Références UI
+        const hudEl = document.getElementById('hud');
+        const startScreenEl = document.getElementById('start-screen');
+        const pauseScreenEl = document.getElementById('pause-screen');
+        const shopModalEl = document.getElementById('shop-modal');
+        const confirmRestartModalEl = document.getElementById('confirm-restart-modal');
+        const gameoverScreenEl = document.getElementById('gameover-screen');
+        const dangerOverlayEl = document.getElementById('danger-overlay');
+
+        function saveProgress() {
+            localStorage.setItem('ilefao_joda_stars', String(starsBalance));
+            localStorage.setItem('ilefao_joda_sprint_lvl', String(sprintUpgradeLevel));
+            localStorage.setItem('ilefao_joda_bananas', String(bananaPeelCount));
+        }
+
+        function getSprintUpgradeCost() {
+            return 2 + sprintUpgradeLevel;
+        }
+
+        function getPlayerSprintSpeed() {
+            return 20.5 + sprintUpgradeLevel * 0.85;
+        }
+
+        /**
+         * ============================================================================
+         * THÈME CLAIR / SOMBRE & AMBIANCE ATMOSPHÉRIQUE
+         * ============================================================================
+         */
+        function applyTheme(dark) {
+            isDarkMode = dark;
+            const htmlEl = document.documentElement;
+            if (dark) {
+                htmlEl.classList.add('dark');
+            } else {
+                htmlEl.classList.remove('dark');
+            }
+
+            const icon = dark ? '☀️' : '🌙';
+            const label = dark ? 'Clair' : 'Sombre';
+            document.getElementById('theme-icon-hud').textContent = icon;
+            document.getElementById('theme-icon-start').textContent = icon;
+            document.getElementById('theme-label-start').textContent = label;
+
+            if (scene && renderer) {
+                if (dark) {
+                    scene.background = new THREE.Color(0x0f172a);
+                    scene.fog = new THREE.FogExp2(0x0f172a, 0.0075);
+                    if (ambientLight) ambientLight.intensity = 0.65;
+                    if (hemiLight) hemiLight.intensity = 0.55;
+                    if (dirLight) {
+                        dirLight.intensity = 1.2;
+                        dirLight.color.setHex(0xfff1d6);
+                    }
+                    if (groundMesh) groundMesh.material.color.setHex(0x334155);
+                } else {
+                    scene.background = new THREE.Color(0x87ceeb);
+                    scene.fog = new THREE.FogExp2(0xbae6fd, 0.0052);
+                    if (ambientLight) ambientLight.intensity = 0.92;
+                    if (hemiLight) hemiLight.intensity = 0.88;
+                    if (dirLight) {
+                        dirLight.intensity = 1.45;
+                        dirLight.color.setHex(0xfffbeb);
+                    }
+                    if (groundMesh) groundMesh.material.color.setHex(0x94a3b8);
+                }
+            }
+        }
+
+        /**
+         * ============================================================================
+         * INITIALISATION DE LA SCÈNE 3D THREE.JS & DE LA VILLE RÉALISTE
+         * ============================================================================
+         */
+        function initScene() {
+            const canvas = document.getElementById('game-canvas');
+            scene = new THREE.Scene();
+
+            camera = new THREE.PerspectiveCamera(
+                60,
+                window.innerWidth / window.innerHeight,
+                0.1,
+                340
+            );
+
+            renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.05;
+
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+            scene.add(ambientLight);
+
+            hemiLight = new THREE.HemisphereLight(0x93c5fd, 0x334155, 0.55);
+            scene.add(hemiLight);
+
+            dirLight = new THREE.DirectionalLight(0xfff1d6, 1.2);
+            dirLight.position.set(45, 72, 38);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            dirLight.shadow.camera.near = 10;
+            dirLight.shadow.camera.far = 230;
+            const d = 118;
+            dirLight.shadow.camera.left = -d;
+            dirLight.shadow.camera.right = d;
+            dirLight.shadow.camera.top = d;
+            dirLight.shadow.camera.bottom = -d;
+            dirLight.shadow.bias = -0.0005;
+            scene.add(dirLight);
+
+            asphaltTex = createAsphaltTexture();
+            sidewalkTex = createSidewalkTexture();
+
+            applyTheme(isDarkMode);
+
+            buildCity();
+            createCharacters();
+            configureLevelTrap();
+
+            window.addEventListener('resize', handleResize);
+        }
+
+        function handleResize() {
+            if (!camera || !renderer) return;
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        }
+
+        function buildCity() {
+            obstacles = [];
+
+            const groundGeo = new THREE.PlaneGeometry(CITY_HALF_SIZE * 2.6, CITY_HALF_SIZE * 2.6);
+            const groundMat = new THREE.MeshStandardMaterial({
+                color: 0x334155,
+                map: sidewalkTex,
+                roughness: 0.86,
+                metalness: 0.06
+            });
+            groundMesh = new THREE.Mesh(groundGeo, groundMat);
+            groundMesh.rotation.x = -Math.PI / 2;
+            groundMesh.receiveShadow = true;
+            scene.add(groundMesh);
+
+            const roadMat = new THREE.MeshStandardMaterial({
+                color: 0x475569,
+                map: asphaltTex,
+                roughness: 0.82,
+                metalness: 0.08
+            });
+            const lineMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.45 });
+            const plazaMat = new THREE.MeshStandardMaterial({
+                color: 0xcbd5e1,
+                map: sidewalkTex,
+                roughness: 0.72
+            });
+
+            const roadCenters = [-72, -36, 0, 36, 72];
+            roadCenters.forEach((coord) => {
+                const nsRoad = new THREE.Mesh(new THREE.BoxGeometry(10.4, 0.08, CITY_HALF_SIZE * 2), roadMat);
+                nsRoad.position.set(coord, 0.04, 0);
+                nsRoad.receiveShadow = true;
+                scene.add(nsRoad);
+
+                const ewRoad = new THREE.Mesh(new THREE.BoxGeometry(CITY_HALF_SIZE * 2, 0.08, 10.4), roadMat);
+                ewRoad.position.set(0, 0.04, coord);
+                ewRoad.receiveShadow = true;
+                scene.add(ewRoad);
+
+                for (let p = -CITY_HALF_SIZE + 8; p <= CITY_HALF_SIZE - 8; p += 12) {
+                    if (roadCenters.includes(p)) continue;
+                    const dashNS = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.1, 4.5), lineMat);
+                    dashNS.position.set(coord, 0.05, p);
+                    scene.add(dashNS);
+
+                    const dashEW = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.1, 0.28), lineMat);
+                    dashEW.position.set(p, 0.05, coord);
+                    scene.add(dashEW);
+                }
+            });
+
+            const plazaCenters = [
+                { x: 0, z: 0, size: 22 },
+                { x: -54, z: 54, size: 16 },
+                { x: 54, z: 54, size: 16 },
+                { x: -54, z: -54, size: 16 }
+            ];
+            plazaCenters.forEach((plaza) => {
+                const plazaMesh = new THREE.Mesh(
+                    new THREE.BoxGeometry(plaza.size, 0.14, plaza.size),
+                    plazaMat
+                );
+                plazaMesh.position.set(plaza.x, 0.07, plaza.z);
+                plazaMesh.receiveShadow = true;
+                scene.add(plazaMesh);
+            });
+
+            buildCityGraph(roadCenters);
+
+            // Grande maison piège (2x plus grande qu'une maison standard) avec porte battante et toit transparent à l'intérieur
+            buildLargeTrapHouse(36, -36);
+
+            // Murs d'enceinte de la ville
+            const wallHeight = 3.6;
+            const wallThickness = 3.0;
+            const span = CITY_HALF_SIZE * 2 + wallThickness * 2;
+            const borderMat = new THREE.MeshStandardMaterial({ color: 0x475569, map: sidewalkTex, roughness: 0.7 });
+
+            const northWall = new THREE.Mesh(new THREE.BoxGeometry(span, wallHeight, wallThickness), borderMat);
+            northWall.position.set(0, wallHeight / 2, -CITY_HALF_SIZE - wallThickness / 2);
+            northWall.castShadow = true;
+            northWall.receiveShadow = true;
+            scene.add(northWall);
+            obstacles.push({
+                minX: -CITY_HALF_SIZE - wallThickness,
+                maxX: CITY_HALF_SIZE + wallThickness,
+                minZ: -CITY_HALF_SIZE - wallThickness,
+                maxZ: -CITY_HALF_SIZE
+            });
+
+            const southWall = new THREE.Mesh(new THREE.BoxGeometry(span, wallHeight, wallThickness), borderMat);
+            southWall.position.set(0, wallHeight / 2, CITY_HALF_SIZE + wallThickness / 2);
+            southWall.castShadow = true;
+            southWall.receiveShadow = true;
+            scene.add(southWall);
+            obstacles.push({
+                minX: -CITY_HALF_SIZE - wallThickness,
+                maxX: CITY_HALF_SIZE + wallThickness,
+                minZ: CITY_HALF_SIZE,
+                maxZ: CITY_HALF_SIZE + wallThickness
+            });
+
+            const westWall = new THREE.Mesh(new THREE.BoxGeometry(wallThickness, wallHeight, span), borderMat);
+            westWall.position.set(-CITY_HALF_SIZE - wallThickness / 2, wallHeight / 2, 0);
+            westWall.castShadow = true;
+            westWall.receiveShadow = true;
+            scene.add(westWall);
+            obstacles.push({
+                minX: -CITY_HALF_SIZE - wallThickness,
+                maxX: -CITY_HALF_SIZE,
+                minZ: -CITY_HALF_SIZE - wallThickness,
+                maxZ: CITY_HALF_SIZE + wallThickness
+            });
+
+            const eastWall = new THREE.Mesh(new THREE.BoxGeometry(wallThickness, wallHeight, span), borderMat);
+            eastWall.position.set(CITY_HALF_SIZE + wallThickness / 2, wallHeight / 2, 0);
+            eastWall.castShadow = true;
+            eastWall.receiveShadow = true;
+            scene.add(eastWall);
+            obstacles.push({
+                minX: CITY_HALF_SIZE,
+                maxX: CITY_HALF_SIZE + wallThickness,
+                minZ: -CITY_HALF_SIZE - wallThickness,
+                maxZ: CITY_HALF_SIZE + wallThickness
+            });
+
+            // Bâtiments texturés, parcs, poubelles urbaines (clin d'œil à l'icône) et lampadaires
+            const buildingPalette = [0xd97706, 0x2563eb, 0x059669, 0x7c3aed, 0xdc2626, 0x0284c7, 0xea580c, 0x4f46e5];
+            const blockCenters = [-90, -54, -18, 18, 54, 90];
+            let colorIdx = 0;
+
+            blockCenters.forEach((bx) => {
+                blockCenters.forEach((bz) => {
+                    if (Math.hypot(bx - 36, bz - (-36)) < 24) return;
+                    if (Math.hypot(bx - (-54), bz - 54) < 15) return;
+                    if (Math.hypot(bx - 54, bz - 54) < 15) return;
+                    if (Math.hypot(bx - (-54), bz - (-54)) < 15) return;
+
+                    const isPark = (Math.abs(bx) === 18 && Math.abs(bz) === 18) || (bx === 54 && bz === -18) || (bx === -18 && bz === 90);
+                    if (isPark) {
+                        const parkBase = new THREE.Mesh(
+                            new THREE.BoxGeometry(18, 0.22, 18),
+                            new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.85 })
+                        );
+                        parkBase.position.set(bx, 0.11, bz);
+                        parkBase.receiveShadow = true;
+                        scene.add(parkBase);
+
+                        addTree(bx - 4.5, bz - 4.5);
+                        addTree(bx + 4.5, bz + 4.5);
+                        addTree(bx + 4.5, bz - 4.5);
+                        addTree(bx - 4.5, bz + 4.5);
+                    } else {
+                        const w = 13 + ((colorIdx * 3) % 5);
+                        const d = 13 + ((colorIdx * 5) % 5);
+                        const h = 9 + ((colorIdx * 7) % 18);
+                        const color = buildingPalette[colorIdx % buildingPalette.length];
+                        colorIdx++;
+
+                        const facadeTex = createBuildingFacadeTexture(color, true);
+                        const bMat = new THREE.MeshStandardMaterial({
+                            color: 0xffffff,
+                            map: facadeTex,
+                            roughness: 0.55,
+                            metalness: 0.12
+                        });
+                        const bMesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), bMat);
+                        bMesh.position.set(bx, h / 2, bz);
+                        bMesh.castShadow = true;
+                        bMesh.receiveShadow = true;
+                        scene.add(bMesh);
+
+                        // Corniche supérieure
+                        const cornice = new THREE.Mesh(
+                            new THREE.BoxGeometry(w + 0.8, 0.55, d + 0.8),
+                            new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.65 })
+                        );
+                        cornice.position.set(bx, h + 0.25, bz);
+                        cornice.castShadow = true;
+                        scene.add(cornice);
+
+                        obstacles.push({
+                            minX: bx - w / 2,
+                            maxX: bx + w / 2,
+                            minZ: bz - d / 2,
+                            maxZ: bz + d / 2
+                        });
+                    }
+                });
+            });
+
+            // Lampadaires et poubelles réalistes le long des avenues
+            const lampCoords = [-72, -36, 0, 36, 72];
+            lampCoords.forEach((c, idx) => {
+                addStreetLamp(c + 6.2, -54);
+                addStreetLamp(c - 6.2, 54);
+                addStreetLamp(-54, c + 6.2);
+                addStreetLamp(54, c - 6.2);
+                if (idx % 2 === 0) {
+                    addTrashBin(c - 6.0, -24);
+                }
+            });
+        }
+
+        function addTrashBin(x, z) {
+            const binGroup = new THREE.Group();
+            const binMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.5, metalness: 0.4 });
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.48, 1.25, 14), binMat);
+            body.position.y = 0.625;
+            body.castShadow = true;
+            body.receiveShadow = true;
+            binGroup.add(body);
+
+            const lid = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 0.14, 14), binMat);
+            lid.position.y = 1.3;
+            lid.castShadow = true;
+            binGroup.add(lid);
+
+            binGroup.position.set(x, 0.08, z);
+            scene.add(binGroup);
+
+            obstacles.push({
+                minX: x - 0.55,
+                maxX: x + 0.55,
+                minZ: z - 0.55,
+                maxZ: z + 0.55
+            });
+        }
+
+        /**
+         * Graphe urbain (nœuds aux intersections + arêtes) pour la navigation de Joda
+         */
+        function buildCityGraph(roadCoords) {
+            const nodes = [];
+            const edges = [];
+            const gridIndex = new Map();
+
+            roadCoords.forEach((x, ix) => {
+                roadCoords.forEach((z, iz) => {
+                    const id = nodes.length;
+                    nodes.push({ id, x, z, ix, iz });
+                    gridIndex.set(`${ix},${iz}`, id);
+                });
+            });
+
+            nodes.forEach((node) => {
+                const neighbors = [
+                    [node.ix + 1, node.iz],
+                    [node.ix - 1, node.iz],
+                    [node.ix, node.iz + 1],
+                    [node.ix, node.iz - 1]
+                ];
+                neighbors.forEach(([nx, nz]) => {
+                    const nId = gridIndex.get(`${nx},${nz}`);
+                    if (nId !== undefined) {
+                        edges.push([node.id, nId]);
+                    }
+                });
+            });
+
+            cityGraph = { nodes, edges };
+        }
+
+        function getNextChaseWaypoint(fromX, fromZ, targetX, targetZ) {
+            if (!cityGraph.nodes.length) return { x: targetX, z: targetZ };
+
+            const directDist = Math.hypot(targetX - fromX, targetZ - fromZ);
+            if (directDist < 16) {
+                return { x: targetX, z: targetZ };
+            }
+
+            let closestNode = cityGraph.nodes[0];
+            let bestFromDist = Infinity;
+            for (const n of cityGraph.nodes) {
+                const d = Math.hypot(n.x - fromX, n.z - fromZ);
+                if (d < bestFromDist) {
+                    bestFromDist = d;
+                    closestNode = n;
+                }
+            }
+
+            let bestNextNode = closestNode;
+            let bestScore = Math.hypot(targetX - closestNode.x, targetZ - closestNode.z);
+
+            for (const [a, b] of cityGraph.edges) {
+                let candidate = null;
+                if (a === closestNode.id) candidate = cityGraph.nodes[b];
+                else if (b === closestNode.id) candidate = cityGraph.nodes[a];
+                if (candidate) {
+                    const dToTarget = Math.hypot(targetX - candidate.x, targetZ - candidate.z);
+                    if (dToTarget < bestScore) {
+                        bestScore = dToTarget;
+                        bestNextNode = candidate;
+                    }
+                }
+            }
+
+            if (bestFromDist < 4.5 && bestNextNode.id !== closestNode.id) {
+                return { x: bestNextNode.x, z: bestNextNode.z };
+            }
+            return { x: closestNode.x, z: closestNode.z };
+        }
+
+        /**
+         * Grande maison piège (2x plus grande qu'une maison standard : 21.6 x 21.6)
+         * avec porte battante et toit qui devient transparent lorsque le joueur entre à l'intérieur.
+         */
+        function buildLargeTrapHouse(hx, hz) {
+            const group = new THREE.Group();
+            group.position.set(hx, 0.16, hz);
+
+            const halfW = 10.8;
+            const halfD = 10.8;
+            const wallH = 4.6;
+            const wallT = 0.55;
+            const doorWidth = 3.4;
+            const sideWallW = (halfW * 2 - doorWidth) / 2;
+
+            const floor = new THREE.Mesh(
+                new THREE.BoxGeometry(halfW * 2, 0.12, halfD * 2),
+                new THREE.MeshStandardMaterial({ color: 0x78350f, map: sidewalkTex, roughness: 0.72 })
+            );
+            floor.position.y = 0.06;
+            floor.receiveShadow = true;
+            group.add(floor);
+
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0xfef3c7, roughness: 0.62 });
+            const trimMat = new THREE.MeshStandardMaterial({ color: 0x92400e, roughness: 0.58 });
+
+            const backWall = new THREE.Mesh(new THREE.BoxGeometry(halfW * 2, wallH, wallT), wallMat);
+            backWall.position.set(0, wallH / 2, -halfD + wallT / 2);
+            backWall.castShadow = true;
+            backWall.receiveShadow = true;
+            group.add(backWall);
+
+            const leftWall = new THREE.Mesh(new THREE.BoxGeometry(wallT, wallH, halfD * 2), wallMat);
+            leftWall.position.set(-halfW + wallT / 2, wallH / 2, 0);
+            leftWall.castShadow = true;
+            leftWall.receiveShadow = true;
+            group.add(leftWall);
+
+            const rightWall = new THREE.Mesh(new THREE.BoxGeometry(wallT, wallH, halfD * 2), wallMat);
+            rightWall.position.set(halfW - wallT / 2, wallH / 2, 0);
+            rightWall.castShadow = true;
+            rightWall.receiveShadow = true;
+            group.add(rightWall);
+
+            const frontLeft = new THREE.Mesh(new THREE.BoxGeometry(sideWallW, wallH, wallT), wallMat);
+            frontLeft.position.set(-doorWidth / 2 - sideWallW / 2, wallH / 2, halfD - wallT / 2);
+            frontLeft.castShadow = true;
+            frontLeft.receiveShadow = true;
+            group.add(frontLeft);
+
+            const frontRight = new THREE.Mesh(new THREE.BoxGeometry(sideWallW, wallH, wallT), wallMat);
+            frontRight.position.set(doorWidth / 2 + sideWallW / 2, wallH / 2, halfD - wallT / 2);
+            frontRight.castShadow = true;
+            frontRight.receiveShadow = true;
+            group.add(frontRight);
+
+            const lintel = new THREE.Mesh(new THREE.BoxGeometry(doorWidth, 0.9, wallT + 0.12), trimMat);
+            lintel.position.set(0, wallH - 0.45, halfD - wallT / 2);
+            lintel.castShadow = true;
+            group.add(lintel);
+
+            // Toit incliné en deux pans avec transparence dynamique quand le joueur est à l'intérieur
+            const roofMat = new THREE.MeshStandardMaterial({
+                color: 0xb91c1c,
+                roughness: 0.58,
+                transparent: true,
+                opacity: 0.94
+            });
+
+            const roofLeft = new THREE.Mesh(
+                new THREE.BoxGeometry(halfW * 1.18, 0.38, halfD * 2.12),
+                roofMat
+            );
+            roofLeft.position.set(-halfW * 0.52, wallH + 0.9, 0);
+            roofLeft.rotation.z = 0.28;
+            roofLeft.castShadow = true;
+            group.add(roofLeft);
+
+            const roofRight = new THREE.Mesh(
+                new THREE.BoxGeometry(halfW * 1.18, 0.38, halfD * 2.12),
+                roofMat
+            );
+            roofRight.position.set(halfW * 0.52, wallH + 0.9, 0);
+            roofRight.rotation.z = -0.28;
+            roofRight.castShadow = true;
+            group.add(roofRight);
+
+            // Porte battante articulée
+            const doorPivot = new THREE.Group();
+            doorPivot.position.set(-doorWidth / 2, 0.12, halfD - wallT / 2);
+
+            const doorLeaf = new THREE.Mesh(
+                new THREE.BoxGeometry(doorWidth, wallH - 0.98, 0.26),
+                new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.52 })
+            );
+            doorLeaf.position.set(doorWidth / 2, (wallH - 0.98) / 2, 0);
+            doorLeaf.castShadow = true;
+            doorLeaf.receiveShadow = true;
+            doorPivot.add(doorLeaf);
+
+            const handle = new THREE.Mesh(
+                new THREE.SphereGeometry(0.13, 10, 10),
+                new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.7, roughness: 0.25 })
+            );
+            handle.position.set(doorWidth - 0.35, (wallH - 0.98) * 0.48, 0.18);
+            doorPivot.add(handle);
+
+            group.add(doorPivot);
+            scene.add(group);
+
+            obstacles.push(
+                { minX: hx - halfW, maxX: hx + halfW, minZ: hz - halfD, maxZ: hz - halfD + wallT },
+                { minX: hx - halfW, maxX: hx - halfW + wallT, minZ: hz - halfD, maxZ: hz + halfD },
+                { minX: hx + halfW - wallT, maxX: hx + halfW, minZ: hz - halfD, maxZ: hz + halfD },
+                { minX: hx - halfW, maxX: hx - doorWidth / 2, minZ: hz + halfD - wallT, maxZ: hz + halfD },
+                { minX: hx + doorWidth / 2, maxX: hx + halfW, minZ: hz + halfD - wallT, maxZ: hz + halfD }
+            );
+
+            const doorObstacle = {
+                minX: hx - doorWidth / 2,
+                maxX: hx + doorWidth / 2,
+                minZ: hz + halfD - 0.38,
+                maxZ: hz + halfD + 0.38
+            };
+
+            trapHouse = {
+                group,
+                x: hx,
+                z: hz,
+                halfW: halfW - wallT - 0.4,
+                halfD: halfD - wallT - 0.4,
+                doorX: hx,
+                doorZ: hz + halfD,
+                doorPivot,
+                doorObstacle,
+                doorClosed: false,
+                doorAngle: -1.45,
+                roofMat,
+                roofOpacity: 0.94
+            };
+            doorPivot.rotation.y = trapHouse.doorAngle;
+        }
+
+        function isPointInsideHouse(x, z) {
+            if (!trapHouse) return false;
+            return (
+                Math.abs(x - trapHouse.x) < trapHouse.halfW &&
+                Math.abs(z - trapHouse.z) < trapHouse.halfD
+            );
+        }
+
+        function setHouseDoorClosed(closed) {
+            if (!trapHouse) return;
+            if (closed && !trapHouse.doorClosed) {
+                trapHouse.doorClosed = true;
+                obstacles.push(trapHouse.doorObstacle);
+                sfx.playDoorSlam();
+            } else if (!closed && trapHouse.doorClosed) {
+                trapHouse.doorClosed = false;
+                const idx = obstacles.indexOf(trapHouse.doorObstacle);
+                if (idx !== -1) obstacles.splice(idx, 1);
+            }
+        }
+
+        function addTree(x, z) {
+            const trunk = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.34, 0.48, 2.2, 10),
+                new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.9 })
+            );
+            trunk.position.set(x, 1.1, z);
+            trunk.castShadow = true;
+            scene.add(trunk);
+
+            const crownMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.72 });
+            const crown1 = new THREE.Mesh(new THREE.ConeGeometry(2.0, 4.2, 10), crownMat);
+            crown1.position.set(x, 4.0, z);
+            crown1.castShadow = true;
+            scene.add(crown1);
+
+            const crown2 = new THREE.Mesh(new THREE.SphereGeometry(1.45, 10, 8), crownMat);
+            crown2.position.set(x + 0.5, 3.2, z + 0.3);
+            crown2.castShadow = true;
+            scene.add(crown2);
+
+            obstacles.push({
+                minX: x - 0.55,
+                maxX: x + 0.55,
+                minZ: z - 0.55,
+                maxZ: z + 0.55
+            });
+        }
+
+        function addStreetLamp(x, z) {
+            const pole = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.1, 0.14, 5.2, 8),
+                new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.7, roughness: 0.28 })
+            );
+            pole.position.set(x, 2.6, z);
+            pole.castShadow = true;
+            scene.add(pole);
+
+            const bulb = new THREE.Mesh(
+                new THREE.SphereGeometry(0.28, 10, 10),
+                new THREE.MeshStandardMaterial({
+                    color: 0xfef08a,
+                    emissive: 0xfacc15,
+                    emissiveIntensity: 0.95
+                })
+            );
+            bulb.position.set(x, 5.3, z);
+            scene.add(bulb);
+        }
+
+        /**
+         * Personnages détaillés inspirés de l'icône :
+         * - Joueur : sweat à capuche rouge vif avec cordons blancs, jean bleu, baskets rouges à semelle claire
+         * - Joda : peau bronzée, cheveux bruns ébouriffés sans chapeau, débardeur blanc, short noir, sandales
+         */
+        function buildRunnerMesh() {
+            const root = new THREE.Group();
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xd98252, roughness: 0.58 });
+            const hoodieMat = new THREE.MeshStandardMaterial({
+                color: 0xef4444,
+                map: createClothTexture(0xef4444),
+                roughness: 0.65
+            });
+            const jeansMat = new THREE.MeshStandardMaterial({
+                color: 0x1d4ed8,
+                map: createClothTexture(0x1d4ed8),
+                roughness: 0.72
+            });
+            const shoeMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.45 });
+            const soleMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.75 });
+            const cordMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.5 });
+
+            // Torse sweat rouge + capuche relevée
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(0.92, 1.15, 0.52), hoodieMat);
+            torso.position.y = 1.45;
+            torso.castShadow = true;
+            root.add(torso);
+
+            const hood = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 10), hoodieMat);
+            hood.position.set(0, 2.38, -0.14);
+            hood.scale.set(1.05, 1.05, 0.85);
+            hood.castShadow = true;
+            root.add(hood);
+
+            // Cordons blancs du sweat
+            const cordL = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.42, 6), cordMat);
+            cordL.position.set(-0.14, 1.72, 0.28);
+            const cordR = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.42, 6), cordMat);
+            cordR.position.set(0.14, 1.72, 0.28);
+            root.add(cordL, cordR);
+
+            // Tête + grands yeux expressifs inspirés de l'icône
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.74, 0.74), skinMat);
+            head.position.y = 2.44;
+            head.castShadow = true;
+            root.add(head);
+
+            const scleraMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const pupilMat = new THREE.MeshBasicMaterial({ color: 0x0f172a });
+
+            const eyeWhiteL = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 10), scleraMat);
+            eyeWhiteL.position.set(-0.17, 2.5, 0.36);
+            const eyeWhiteR = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 10), scleraMat);
+            eyeWhiteR.position.set(0.17, 2.5, 0.36);
+
+            const pupilL = new THREE.Mesh(new THREE.SphereGeometry(0.065, 8, 8), pupilMat);
+            pupilL.position.set(-0.17, 2.5, 0.46);
+            const pupilR = new THREE.Mesh(new THREE.SphereGeometry(0.065, 8, 8), pupilMat);
+            pupilR.position.set(0.17, 2.5, 0.46);
+            root.add(eyeWhiteL, eyeWhiteR, pupilL, pupilR);
+
+            // Cheveux texturés foncés
+            const hairMat = new THREE.MeshStandardMaterial({ color: 0x291d18, roughness: 0.85 });
+            for (let i = 0; i < 12; i++) {
+                const ang = (i / 12) * Math.PI * 2;
+                const curl = new THREE.Mesh(new THREE.DodecahedronGeometry(0.17, 0), hairMat);
+                curl.position.set(Math.cos(ang) * 0.34, 2.86 + (i % 2) * 0.06, Math.sin(ang) * 0.34 - 0.04);
+                curl.castShadow = true;
+                root.add(curl);
+            }
+
+            // Bras gauche & droit
+            const leftArm = new THREE.Group();
+            leftArm.position.set(-0.63, 1.9, 0);
+            const lSleeve = new THREE.Mesh(new THREE.BoxGeometry(0.33, 0.78, 0.33), hoodieMat);
+            lSleeve.position.y = -0.32;
+            lSleeve.castShadow = true;
+            const lHand = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.26, 0.28), skinMat);
+            lHand.position.y = -0.78;
+            leftArm.add(lSleeve, lHand);
+            root.add(leftArm);
+
+            const rightArm = new THREE.Group();
+            rightArm.position.set(0.63, 1.9, 0);
+            const rSleeve = new THREE.Mesh(new THREE.BoxGeometry(0.33, 0.78, 0.33), hoodieMat);
+            rSleeve.position.y = -0.32;
+            rSleeve.castShadow = true;
+            const rHand = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.26, 0.28), skinMat);
+            rHand.position.y = -0.78;
+            rightArm.add(rSleeve, rHand);
+            root.add(rightArm);
+
+            // Jambes en jean bleu + baskets rouges à semelle blanche
+            const leftLeg = new THREE.Group();
+            leftLeg.position.set(-0.24, 0.88, 0);
+            const lPant = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.74, 0.38), jeansMat);
+            lPant.position.y = -0.36;
+            lPant.castShadow = true;
+            const lShoe = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.16, 0.54), shoeMat);
+            lShoe.position.set(0, -0.76, 0.06);
+            const lSole = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.07, 0.56), soleMat);
+            lSole.position.set(0, -0.85, 0.06);
+            leftLeg.add(lPant, lShoe, lSole);
+            root.add(leftLeg);
+
+            const rightLeg = new THREE.Group();
+            rightLeg.position.set(0.24, 0.88, 0);
+            const rPant = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.74, 0.38), jeansMat);
+            rPant.position.y = -0.36;
+            rPant.castShadow = true;
+            const rShoe = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.16, 0.54), shoeMat);
+            rShoe.position.set(0, -0.76, 0.06);
+            const rSole = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.07, 0.56), soleMat);
+            rSole.position.set(0, -0.85, 0.06);
+            rightLeg.add(rPant, rShoe, rSole);
+            root.add(rightLeg);
+
+            return { root, leftArm, rightArm, leftLeg, rightLeg };
+        }
+
+        function buildJodaMesh() {
+            const root = new THREE.Group();
+            const tanSkinMat = new THREE.MeshStandardMaterial({ color: 0xb87344, roughness: 0.55 });
+            const tankMat = new THREE.MeshStandardMaterial({
+                color: 0xffffff,
+                map: createClothTexture(0xffffff),
+                roughness: 0.6
+            });
+            const shortsMat = new THREE.MeshStandardMaterial({
+                color: 0x0f172a,
+                map: createClothTexture(0x0f172a),
+                roughness: 0.7
+            });
+            const sandalMat = new THREE.MeshStandardMaterial({ color: 0x3f2e18, roughness: 0.8 });
+
+            // Débardeur blanc ajusté
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(0.96, 1.16, 0.52), tankMat);
+            torso.position.y = 1.45;
+            torso.castShadow = true;
+            root.add(torso);
+
+            const strapL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.36, 0.54), tankMat);
+            strapL.position.set(-0.28, 2.04, 0);
+            strapL.castShadow = true;
+            const strapR = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.36, 0.54), tankMat);
+            strapR.position.set(0.28, 2.04, 0);
+            strapR.castShadow = true;
+            root.add(strapL, strapR);
+
+            // Tête bronzée & regard furieux
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.74, 0.74, 0.74), tanSkinMat);
+            head.position.y = 2.44;
+            head.castShadow = true;
+            root.add(head);
+
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const pupilMat = new THREE.MeshBasicMaterial({ color: 0x090d16 });
+            const browMat = new THREE.MeshBasicMaterial({ color: 0x29180c });
+
+            const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 8), eyeMat);
+            eyeL.position.set(-0.17, 2.48, 0.36);
+            const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 8), eyeMat);
+            eyeR.position.set(0.17, 2.48, 0.36);
+            const pupL = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), pupilMat);
+            pupL.position.set(-0.17, 2.48, 0.45);
+            const pupR = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), pupilMat);
+            pupR.position.set(0.17, 2.48, 0.45);
+
+            const browL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.08), browMat);
+            browL.position.set(-0.17, 2.6, 0.4);
+            browL.rotation.z = -0.28;
+            const browR = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.08), browMat);
+            browR.position.set(0.17, 2.6, 0.4);
+            browR.rotation.z = 0.28;
+
+            root.add(eyeL, eyeR, pupL, pupR, browL, browR);
+
+            // Cheveux bruns ébouriffés SANS CHAPEAU
+            const hairMat = new THREE.MeshStandardMaterial({ color: 0x5c3317, roughness: 0.75 });
+            const hairBase = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.24, 0.8), hairMat);
+            hairBase.position.set(0, 2.83, -0.02);
+            hairBase.castShadow = true;
+            root.add(hairBase);
+
+            const tuftCoords = [
+                [-0.28, 3.0, 0.14],
+                [0.0, 3.06, 0.06],
+                [0.28, 2.99, -0.08],
+                [-0.2, 2.97, -0.24],
+                [0.22, 2.96, 0.22],
+                [0.36, 2.86, 0.08],
+                [-0.36, 2.85, -0.04]
+            ];
+            tuftCoords.forEach(([tx, ty, tz], idx) => {
+                const tuft = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.36, 6), hairMat);
+                tuft.position.set(tx, ty, tz);
+                tuft.rotation.set(((idx % 3) - 1) * 0.25, 0, ((idx % 2 === 0) ? 1 : -1) * 0.28);
+                tuft.castShadow = true;
+                root.add(tuft);
+            });
+
+            // Bras bronzés articulés
+            const leftArm = new THREE.Group();
+            leftArm.position.set(-0.65, 1.92, 0);
+            const lArmM = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.96, 0.34), tanSkinMat);
+            lArmM.position.y = -0.38;
+            lArmM.castShadow = true;
+            leftArm.add(lArmM);
+            root.add(leftArm);
+
+            const rightArm = new THREE.Group();
+            rightArm.position.set(0.65, 1.92, 0);
+            const rArmM = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.96, 0.34), tanSkinMat);
+            rArmM.position.y = -0.38;
+            rArmM.castShadow = true;
+            rightArm.add(rArmM);
+            root.add(rightArm);
+
+            // Short noir + jambes bronzées + claquettes/sandales
+            const leftLeg = new THREE.Group();
+            leftLeg.position.set(-0.25, 0.88, 0);
+            const lShort = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.42, 0.4), shortsMat);
+            lShort.position.y = -0.18;
+            lShort.castShadow = true;
+            const lShin = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.52, 0.32), tanSkinMat);
+            lShin.position.y = -0.58;
+            lShin.castShadow = true;
+            const lSandal = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.08, 0.52), sandalMat);
+            lSandal.position.set(0, -0.85, 0.06);
+            leftLeg.add(lShort, lShin, lSandal);
+            root.add(leftLeg);
+
+            const rightLeg = new THREE.Group();
+            rightLeg.position.set(0.25, 0.88, 0);
+            const rShort = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.42, 0.4), shortsMat);
+            rShort.position.y = -0.18;
+            rShort.castShadow = true;
+            const rShin = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.52, 0.32), tanSkinMat);
+            rShin.position.y = -0.58;
+            rShin.castShadow = true;
+            const rSandal = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.08, 0.52), sandalMat);
+            rSandal.position.set(0, -0.85, 0.06);
+            rightLeg.add(rShort, rShin, rSandal);
+            root.add(rightLeg);
+
+            return { root, leftArm, rightArm, leftLeg, rightLeg };
+        }
+
+        function createCharacters() {
+            const pParts = buildRunnerMesh();
+            scene.add(pParts.root);
+            player = {
+                mesh: pParts.root,
+                parts: pParts,
+                pos: new THREE.Vector3(0, 0, 0),
+                vel: new THREE.Vector3(0, 0, 0),
+                velY: 0,
+                isGrounded: true,
+                radius: 0.55,
+                baseSpeed: 13.4,
+                sprintSpeed: getPlayerSprintSpeed(),
+                stamina: 100,
+                isSprinting: false,
+                animTime: 0,
+                stepTimer: 0,
+                dustTimer: 0
+            };
+
+            const cParts = buildJodaMesh();
+            cParts.root.scale.set(1.16, 1.16, 1.16);
+            scene.add(cParts.root);
+            chaser = {
+                mesh: cParts.root,
+                parts: cParts,
+                pos: new THREE.Vector3(0, 0, -36),
+                velY: 0,
+                radius: 0.65,
+                speed: 11.4,
+                throwCooldown: 1.9,
+                throwAnimTimer: 0,
+                animTime: 0,
+                dustTimer: 0,
+                roamTarget: null,
+                slipTimer: 0,
+                fallingTrap: null,
+                fallTimer: 0
+            };
+        }
+
+        /**
+         * ============================================================================
+         * UN SEUL PIÈGE PAR NIVEAU (TROU CACHÉ SANS INDICE OU GRANDE MAISON PIÈGE)
+         * ============================================================================
+         */
+        function clearTraps() {
+            traps.forEach(t => scene.remove(t.mesh));
+            traps = [];
+        }
+
+        function isPositionClearOfObstacles(x, z, clearance) {
+            for (const obs of obstacles) {
+                const closestX = Math.max(obs.minX, Math.min(x, obs.maxX));
+                const closestZ = Math.max(obs.minZ, Math.min(z, obs.maxZ));
+                if (Math.hypot(x - closestX, z - closestZ) < clearance) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        function getRandomValidRoadPosition(minDistFromPlayer, minDistFromChaser) {
+            const roadCoords = [-72, -36, 0, 36, 72];
+            for (let attempt = 0; attempt < 90; attempt++) {
+                let x, z;
+                if (attempt % 2 === 0) {
+                    x = roadCoords[Math.floor(Math.random() * roadCoords.length)];
+                    z = (Math.random() * 2 - 1) * (CITY_HALF_SIZE - 12);
+                } else {
+                    z = roadCoords[Math.floor(Math.random() * roadCoords.length)];
+                    x = (Math.random() * 2 - 1) * (CITY_HALF_SIZE - 12);
+                }
+
+                if (!isPositionClearOfObstacles(x, z, 3.8)) continue;
+                if (trapHouse && Math.hypot(x - trapHouse.x, z - trapHouse.z) < 15) continue;
+                if (player && Math.hypot(x - player.pos.x, z - player.pos.z) < minDistFromPlayer) continue;
+                if (chaser && Math.hypot(x - chaser.pos.x, z - chaser.pos.z) < minDistFromChaser) continue;
+                return { x, z };
+            }
+            return { x: -36, z: 0 };
+        }
+
+        function spawnSingleHiddenHole() {
+            clearTraps();
+            const radius = 2.85;
+            const pos = getRandomValidRoadPosition(16, 12);
+
+            // Trou sombre unique sans marqueur lumineux ni radar
+            const group = new THREE.Group();
+            group.position.set(pos.x, 0.03, pos.z);
+
+            const pitMesh = new THREE.Mesh(
+                new THREE.CircleGeometry(radius, 32),
+                new THREE.MeshBasicMaterial({ color: 0x05070c })
+            );
+            pitMesh.rotation.x = -Math.PI / 2;
+            pitMesh.position.y = 0.02;
+            group.add(pitMesh);
+
+            scene.add(group);
+            traps.push({
+                mesh: group,
+                x: pos.x,
+                z: pos.z,
+                radius
+            });
+        }
+
+        function configureLevelTrap() {
+            clearTraps();
+            setHouseDoorClosed(false);
+            activeTrapType = (level % 2 === 1) ? 'HOLE' : 'HOUSE';
+
+            const titleEl = document.getElementById('hud-trap-title');
+            const descEl = document.getElementById('hud-trap-desc');
+
+            if (activeTrapType === 'HOLE') {
+                spawnSingleHiddenHole();
+                titleEl.textContent = '🕳️ PIÈGE : TROU CACHÉ';
+                descEl.textContent = "Aucun indice sur la carte : trouve l'unique trou caché et attire Joda dedans sans tomber !";
+            } else {
+                titleEl.textContent = '🏠 PIÈGE : GRANDE MAISON';
+                descEl.textContent = 'Attire Joda dans la grande maison (toit transparent dedans), sors et ferme la porte (F/E) !';
+            }
+        }
+
+        /**
+         * ============================================================================
+         * APPEL À JODA (20 CHARGES PAR PARTIE — TOUCHE C OU BOUTON)
+         * ============================================================================
+         */
+        function triggerCallJoda() {
+            if (gameState !== 'PLAYING') return;
+            if (jodaCallsRemaining <= 0) {
+                showToast('Plus d\'Appel Joda !', 'Les 20 charges de cette partie ont été utilisées.');
+                return;
+            }
+            jodaCallsRemaining--;
+            jodaCallTimer = 5.5;
+            sfx.playCallJoda();
+            showToast('Appel à Joda !', `Joda est attiré vers toi pendant 5,5s (${jodaCallsRemaining}/20 restants).`);
+            updateHUD();
+        }
+
+        /**
+         * ============================================================================
+         * PEAUX DE BANANE DÉPLOYABLES (TOUCHE B OU BOUTON)
+         * ============================================================================
+         */
+        function clearBananaPeels() {
+            bananaPeels.forEach(b => scene.remove(b.mesh));
+            bananaPeels = [];
+        }
+
+        function deployBananaPeel() {
+            if (gameState !== 'PLAYING') return;
+            if (bananaPeelCount <= 0) {
+                showToast('Plus de peau de banane !', 'Ouvre la boutique 🌟 pour en acheter (1 ⭐).');
+                return;
+            }
+
+            bananaPeelCount--;
+            saveProgress();
+            sfx.playJump();
+
+            const group = new THREE.Group();
+            const peelMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.4 });
+            const stemMat = new THREE.MeshStandardMaterial({ color: 0x3f2e18, roughness: 0.8 });
+
+            for (let i = 0; i < 3; i++) {
+                const angle = (i / 3) * Math.PI * 2;
+                const flap = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.55, 6), peelMat);
+                flap.position.set(Math.cos(angle) * 0.22, 0.2, Math.sin(angle) * 0.22);
+                flap.rotation.z = -Math.cos(angle) * 0.9;
+                flap.rotation.x = Math.sin(angle) * 0.9;
+                flap.castShadow = true;
+                group.add(flap);
+            }
+
+            const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.2, 6), stemMat);
+            stem.position.y = 0.36;
+            group.add(stem);
+
+            const backX = player.pos.x - Math.sin(player.mesh.rotation.y) * 1.1;
+            const backZ = player.pos.z - Math.cos(player.mesh.rotation.y) * 1.1;
+            group.position.set(backX, 0.05, backZ);
+            scene.add(group);
+
+            bananaPeels.push({
+                mesh: group,
+                x: backX,
+                z: backZ,
+                radius: 1.25
+            });
+            updateHUD();
+        }
+
+        /**
+         * ============================================================================
+         * PROJECTILES EN SPIRALE / PARABOLE AVEC GOUTTELETTES
+         * ============================================================================
+         */
+        function throwProjectile() {
+            chaser.throwAnimTimer = 0.35;
+            sfx.playThrow();
+
+            const startPos = new THREE.Vector3(chaser.pos.x, 2.15, chaser.pos.z);
+            const horizDist = Math.hypot(player.pos.x - startPos.x, player.pos.z - startPos.z);
+            const flightTime = Math.max(0.45, Math.min(1.45, horizDist / 24));
+
+            const levelRatio = Math.min(1, (level - 1) / MAX_LEVELS);
+            const leadFactor = Math.min(0.96, 0.48 + levelRatio * 0.48);
+            const jitterRadius = Math.max(0.7, 2.35 - levelRatio * 1.65);
+
+            let predX = player.pos.x + player.vel.x * flightTime * leadFactor;
+            let predZ = player.pos.z + player.vel.z * flightTime * leadFactor;
+
+            const jitterAngle = Math.random() * Math.PI * 2;
+            const jitterDist = Math.random() * jitterRadius;
+            predX += Math.cos(jitterAngle) * jitterDist;
+            predZ += Math.sin(jitterAngle) * jitterDist;
+
+            const targetPos = new THREE.Vector3(predX, 0.85, predZ);
+
+            const vx = (targetPos.x - startPos.x) / flightTime;
+            const vz = (targetPos.z - startPos.z) / flightTime;
+            const vy = (targetPos.y - startPos.y - 0.5 * GRAVITY * flightTime * flightTime) / flightTime;
+
+            const poopGroup = new THREE.Group();
+            const poopMat = new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 0.55 });
+
+            const baseBlob = new THREE.Mesh(new THREE.SphereGeometry(0.44, 12, 10), poopMat);
+            baseBlob.scale.set(1.18, 0.72, 1.18);
+            baseBlob.castShadow = true;
+            poopGroup.add(baseBlob);
+
+            const midBlob = new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 8), poopMat);
+            midBlob.position.y = 0.26;
+            midBlob.scale.set(1.06, 0.75, 1.06);
+            midBlob.castShadow = true;
+            poopGroup.add(midBlob);
+
+            const topBlob = new THREE.Mesh(new THREE.ConeGeometry(0.21, 0.36, 10), poopMat);
+            topBlob.position.y = 0.55;
+            topBlob.rotation.z = 0.18;
+            topBlob.castShadow = true;
+            poopGroup.add(topBlob);
+
+            // Gouttelettes satellites en rotation autour du projectile
+            for (let g = 0; g < 3; g++) {
+                const ang = (g / 3) * Math.PI * 2;
+                const drop = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 8), poopMat);
+                drop.position.set(Math.cos(ang) * 0.58, 0.2, Math.sin(ang) * 0.58);
+                poopGroup.add(drop);
+            }
+
+            poopGroup.position.copy(startPos);
+            scene.add(poopGroup);
+
+            projectiles.push({
+                mesh: poopGroup,
+                vel: new THREE.Vector3(vx, vy, vz),
+                radius: 0.54,
+                age: 0
+            });
+        }
+
+        function spawnSplatParticles(x, y, z, colorHex = 0x5c3a21, count = 16) {
+            const mat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.6 });
+            for (let i = 0; i < count; i++) {
+                const pMesh = new THREE.Mesh(new THREE.SphereGeometry(0.14 + Math.random() * 0.13, 6, 6), mat);
+                pMesh.position.set(x, y, z);
+                scene.add(pMesh);
+
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 2.5 + Math.random() * 6.5;
+                particles.push({
+                    mesh: pMesh,
+                    vel: new THREE.Vector3(
+                        Math.cos(angle) * speed,
+                        3 + Math.random() * 5.5,
+                        Math.sin(angle) * speed
+                    ),
+                    life: 0.55 + Math.random() * 0.25
+                });
+            }
+        }
+
+        function spawnDustParticle(x, z, colorHex = 0xe2e8f0) {
+            const mat = new THREE.MeshBasicMaterial({
+                color: colorHex,
+                transparent: true,
+                opacity: 0.45
+            });
+            const dMesh = new THREE.Mesh(new THREE.SphereGeometry(0.18 + Math.random() * 0.14, 6, 6), mat);
+            dMesh.position.set(x + (Math.random() - 0.5) * 0.5, 0.18, z + (Math.random() - 0.5) * 0.5);
+            scene.add(dMesh);
+            particles.push({
+                mesh: dMesh,
+                vel: new THREE.Vector3((Math.random() - 0.5) * 1.4, 0.9 + Math.random() * 1.2, (Math.random() - 0.5) * 1.4),
+                life: 0.35
+            });
+        }
+
+        /**
+         * ============================================================================
+         * COLLISIONS, NIVEAUX (1..500) & ÉTOILES
+         * ============================================================================
+         */
+        function resolveObstacleCollisions(pos, radius) {
+            const maxBound = CITY_HALF_SIZE - radius;
+            if (pos.x < -maxBound) pos.x = -maxBound;
+            if (pos.x > maxBound) pos.x = maxBound;
+            if (pos.z < -maxBound) pos.z = -maxBound;
+            if (pos.z > maxBound) pos.z = maxBound;
+
+            for (const obs of obstacles) {
+                const closestX = Math.max(obs.minX, Math.min(pos.x, obs.maxX));
+                const closestZ = Math.max(obs.minZ, Math.min(pos.z, obs.maxZ));
+                const dx = pos.x - closestX;
+                const dz = pos.z - closestZ;
+                const distSq = dx * dx + dz * dz;
+
+                if (distSq < radius * radius) {
+                    const dist = Math.sqrt(distSq);
+                    if (dist > 0.0001) {
+                        const overlap = radius - dist;
+                        pos.x += (dx / dist) * overlap;
+                        pos.z += (dz / dist) * overlap;
+                    } else {
+                        const penLeft = Math.abs(pos.x - obs.minX);
+                        const penRight = Math.abs(obs.maxX - pos.x);
+                        const penTop = Math.abs(pos.z - obs.minZ);
+                        const penBottom = Math.abs(obs.maxZ - pos.z);
+                        const minPen = Math.min(penLeft, penRight, penTop, penBottom);
+                        if (minPen === penLeft) pos.x = obs.minX - radius;
+                        else if (minPen === penRight) pos.x = obs.maxX + radius;
+                        else if (minPen === penTop) pos.z = obs.minZ - radius;
+                        else pos.z = obs.maxZ + radius;
+                    }
+                }
+            }
+        }
+
+        function startNewGame() {
+            sfx.init();
+            score = 0;
+            level = 1;
+            levelElapsed = 0;
+            jodaCallsRemaining = MAX_JODA_CALLS;
+            jodaCallTimer = 0;
+            gameState = 'PLAYING';
+
+            projectiles.forEach(p => scene.remove(p.mesh));
+            projectiles = [];
+
+            particles.forEach(p => scene.remove(p.mesh));
+            particles = [];
+
+            clearBananaPeels();
+
+            player.sprintSpeed = getPlayerSprintSpeed();
+            player.pos.set(0, 0, 0);
+            player.vel.set(0, 0, 0);
+            player.velY = 0;
+            player.isGrounded = true;
+            player.stamina = 100;
+            player.mesh.position.copy(player.pos);
+            player.mesh.rotation.set(0, 0, 0);
+            player.mesh.scale.set(1, 1, 1);
+
+            configureLevelTrap();
+            resetChaserForLevel();
+
+            cameraYaw = 0;
+            updateHUD();
+
+            startScreenEl.classList.add('hidden');
+            pauseScreenEl.classList.add('hidden');
+            shopModalEl.classList.add('hidden');
+            confirmRestartModalEl.classList.add('hidden');
+            gameoverScreenEl.classList.add('hidden');
+            hudEl.classList.remove('hidden');
+        }
+
+        function setPaused(paused) {
+            if (paused && gameState === 'PLAYING') {
+                gameState = 'PAUSED';
+                dangerOverlayEl.classList.add('opacity-0');
+                pauseScreenEl.classList.remove('hidden');
+            } else if (!paused && gameState === 'PAUSED') {
+                gameState = 'PLAYING';
+                pauseScreenEl.classList.add('hidden');
+            }
+        }
+
+        function openShop() {
+            if (gameState === 'PLAYING') {
+                stateBeforeShop = 'PLAYING';
+                gameState = 'PAUSED';
+                dangerOverlayEl.classList.add('opacity-0');
+            } else if (gameState === 'PAUSED') {
+                stateBeforeShop = 'PAUSED';
+            } else if (gameState === 'GAMEOVER') {
+                stateBeforeShop = 'GAMEOVER';
+            } else {
+                stateBeforeShop = 'START';
+            }
+            updateShopUI();
+            shopModalEl.classList.remove('hidden');
+        }
+
+        function closeShop() {
+            shopModalEl.classList.add('hidden');
+            if (stateBeforeShop === 'PLAYING') {
+                gameState = 'PLAYING';
+            }
+        }
+
+        function updateShopUI() {
+            document.getElementById('shop-stars-count').textContent = starsBalance;
+            document.getElementById('shop-sprint-lvl').textContent = sprintUpgradeLevel;
+            const sprintCost = getSprintUpgradeCost();
+            document.getElementById('shop-sprint-cost').textContent = sprintCost;
+            document.getElementById('shop-banana-stock').textContent = bananaPeelCount;
+
+            const btnSprint = document.getElementById('btn-buy-sprint');
+            btnSprint.disabled = starsBalance < sprintCost || sprintUpgradeLevel >= 15;
+            if (sprintUpgradeLevel >= 15) {
+                btnSprint.textContent = 'MAX';
+            } else {
+                btnSprint.innerHTML = `⭐ <span id="shop-sprint-cost">${sprintCost}</span>`;
+            }
+
+            const btnBanana = document.getElementById('btn-buy-banana');
+            btnBanana.disabled = starsBalance < 1;
+        }
+
+        function openRestartConfirm() {
+            if (gameState === 'START' || gameState === 'GAMEOVER') {
+                startNewGame();
+                return;
+            }
+            stateBeforeConfirm = gameState;
+            gameState = 'PAUSED';
+            dangerOverlayEl.classList.add('opacity-0');
+            confirmRestartModalEl.classList.remove('hidden');
+        }
+
+        function closeRestartConfirm() {
+            confirmRestartModalEl.classList.add('hidden');
+            if (stateBeforeConfirm === 'PLAYING') {
+                gameState = 'PLAYING';
+            } else if (stateBeforeConfirm === 'PAUSED') {
+                gameState = 'PAUSED';
+                pauseScreenEl.classList.remove('hidden');
+            }
+        }
+
+        function resetChaserForLevel() {
+            const spawnPos = getRandomValidRoadPosition(30, 0);
+            chaser.pos.set(spawnPos.x, 0, spawnPos.z);
+            chaser.velY = 0;
+            chaser.roamTarget = null;
+            chaser.slipTimer = 0;
+            chaser.fallingTrap = null;
+            chaser.fallTimer = 0;
+            chaser.mesh.position.copy(chaser.pos);
+            chaser.mesh.rotation.set(0, 0, 0);
+            chaser.mesh.scale.set(1.16, 1.16, 1.16);
+
+            const levelRatio = Math.min(1, (level - 1) / MAX_LEVELS);
+            chaser.speed = 11.4 + levelRatio * 10.5;
+            chaser.throwCooldown = Math.max(0.58, 2.05 - levelRatio * 1.45);
+        }
+
+        function computeEarnedStars(elapsedSeconds) {
+            if (elapsedSeconds <= 15) return 3;
+            if (elapsedSeconds <= 30) return 2;
+            return 1;
+        }
+
+        function completeCurrentLevel(trapMethodLabel) {
+            const completedLevel = level;
+            const earnedStars = computeEarnedStars(levelElapsed);
+            const starIcons = '⭐'.repeat(earnedStars);
+
+            starsBalance += earnedStars;
+            saveProgress();
+            sfx.playLevelWin();
+
+            score++;
+            level = Math.min(MAX_LEVELS, level + 1);
+            levelElapsed = 0;
+            jodaCallTimer = 0;
+
+            configureLevelTrap();
+            resetChaserForLevel();
+
+            showToast(
+                `LEVEL ${completedLevel} FINI !`,
+                `${starIcons} (+${earnedStars} étoile${earnedStars > 1 ? 's' : ''}) — ${trapMethodLabel} • Niveau ${level}/${MAX_LEVELS}`
+            );
+            updateHUD();
+        }
+
+        function showToast(title, sub) {
+            const banner = document.getElementById('toast-banner');
+            document.getElementById('toast-title').textContent = title;
+            const hasStars = sub.includes('—');
+            document.getElementById('toast-stars').textContent = hasStars ? sub.split('—')[0].trim() : '';
+            document.getElementById('toast-sub').textContent = hasStars ? sub.split('—').slice(1).join('—').trim() : sub;
+            banner.classList.remove('opacity-0', '-translate-y-4');
+            banner.classList.add('opacity-100', 'translate-y-0');
+
+            clearTimeout(banner._hideTimeout);
+            banner._hideTimeout = setTimeout(() => {
+                banner.classList.remove('opacity-100', 'translate-y-0');
+                banner.classList.add('opacity-0', '-translate-y-4');
+            }, 3000);
+        }
+
+        function triggerGameOver(reason, emoji = '💩💥') {
+            if (gameState === 'GAMEOVER') return;
+            gameState = 'GAMEOVER';
+            sfx.playGameOver();
+
+            dangerOverlayEl.classList.add('opacity-0');
+            pauseScreenEl.classList.add('hidden');
+            shopModalEl.classList.add('hidden');
+            confirmRestartModalEl.classList.add('hidden');
+
+            saveProgress();
+
+            document.getElementById('gameover-emoji').textContent = emoji;
+            document.getElementById('gameover-reason').textContent = reason;
+            document.getElementById('final-score').textContent = `${level}/${MAX_LEVELS}`;
+            document.getElementById('best-score').textContent = `⭐ ${starsBalance}`;
+
+            hudEl.classList.add('hidden');
+            gameoverScreenEl.classList.remove('hidden');
+        }
+
+        /**
+         * ============================================================================
+         * BOUCLE DE SIMULATION & RENDU (60 FPS)
+         * ============================================================================
+         */
+        function update(dt) {
+            if (gameState !== 'PLAYING') {
+                cameraYaw += dt * 0.25;
+                updateCamera();
+                return;
+            }
+
+            levelElapsed += dt;
+            if (jodaCallTimer > 0) {
+                jodaCallTimer = Math.max(0, jodaCallTimer - dt);
+            }
+
+            // Porte battante & toit transparent lorsque le joueur est à l'intérieur de la grande maison
+            if (trapHouse) {
+                const targetAngle = trapHouse.doorClosed ? 0 : -1.45;
+                trapHouse.doorAngle += (targetAngle - trapHouse.doorAngle) * Math.min(1, dt * 14);
+                trapHouse.doorPivot.rotation.y = trapHouse.doorAngle;
+
+                const playerInside = isPointInsideHouse(player.pos.x, player.pos.z);
+                const desiredRoofOpacity = playerInside ? 0.18 : 0.94;
+                trapHouse.roofOpacity += (desiredRoofOpacity - trapHouse.roofOpacity) * Math.min(1, dt * 10);
+                trapHouse.roofMat.opacity = trapHouse.roofOpacity;
+            }
+
+            // 1. DÉPLACEMENT DU JOUEUR
+            let moveX = touchMove.x;
+            let moveZ = touchMove.y;
+            if (keys.forward) moveZ -= 1;
+            if (keys.backward) moveZ += 1;
+            if (keys.left) moveX -= 1;
+            if (keys.right) moveX += 1;
+
+            const inputLen = Math.hypot(moveX, moveZ);
+            if (inputLen > 1) {
+                moveX /= inputLen;
+                moveZ /= inputLen;
+            }
+
+            const wantsSprint = (keys.sprint || touchSprint) && inputLen > 0.05 && player.stamina > 2;
+            player.isSprinting = wantsSprint;
+
+            if (player.isSprinting) {
+                player.stamina = Math.max(0, player.stamina - 34 * dt);
+            } else {
+                player.stamina = Math.min(100, player.stamina + 22 * dt);
+            }
+
+            const currentSpeed = player.isSprinting ? getPlayerSprintSpeed() : player.baseSpeed;
+
+            if (inputLen > 0.05) {
+                const sinY = Math.sin(cameraYaw);
+                const cosY = Math.cos(cameraYaw);
+                const worldX = moveX * cosY + moveZ * sinY;
+                const worldZ = -moveX * sinY + moveZ * cosY;
+
+                player.vel.x = worldX * currentSpeed;
+                player.vel.z = worldZ * currentSpeed;
+
+                const targetRot = Math.atan2(worldX, worldZ);
+                let diff = targetRot - player.mesh.rotation.y;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                player.mesh.rotation.y += diff * Math.min(1, dt * 16);
+
+                player.animTime += dt * (player.isSprinting ? 18 : 12);
+                const swing = Math.sin(player.animTime) * (player.isSprinting ? 0.95 : 0.65);
+                player.parts.leftLeg.rotation.x = swing;
+                player.parts.rightLeg.rotation.x = -swing;
+                player.parts.leftArm.rotation.x = -swing * 0.8;
+                player.parts.rightArm.rotation.x = swing * 0.8;
+
+                if (player.isGrounded) {
+                    player.stepTimer -= dt * (player.isSprinting ? 1.45 : 1.0);
+                    if (player.stepTimer <= 0) {
+                        sfx.playStep();
+                        player.stepTimer = 0.34;
+                    }
+                    player.dustTimer -= dt;
+                    if (player.dustTimer <= 0) {
+                        spawnDustParticle(player.pos.x, player.pos.z, 0xf8fafc);
+                        player.dustTimer = player.isSprinting ? 0.08 : 0.16;
+                    }
+                }
+            } else {
+                player.vel.x = 0;
+                player.vel.z = 0;
+                player.parts.leftLeg.rotation.x *= 0.8;
+                player.parts.rightLeg.rotation.x *= 0.8;
+                player.parts.leftArm.rotation.x *= 0.8;
+                player.parts.rightArm.rotation.x *= 0.8;
+            }
+
+            player.pos.x += player.vel.x * dt;
+            player.pos.z += player.vel.z * dt;
+            resolveObstacleCollisions(player.pos, player.radius);
+
+            player.velY += GRAVITY * dt;
+            player.pos.y += player.velY * dt;
+
+            let overPit = false;
+            if (activeTrapType === 'HOLE' && player.pos.y <= 0.05) {
+                for (const t of traps) {
+                    const d = Math.hypot(player.pos.x - t.x, player.pos.z - t.z);
+                    if (d < t.radius * 0.78) {
+                        overPit = true;
+                        break;
+                    }
+                }
+            }
+
+            if (overPit && player.pos.y < -0.35) {
+                triggerGameOver('Tu es tombé dans le trou caché ! Saute (Espace) ou contourne-le !', '🕳️😵');
+                return;
+            }
+
+            if (!overPit && player.pos.y <= 0) {
+                player.pos.y = 0;
+                player.velY = 0;
+                player.isGrounded = true;
+            }
+
+            player.mesh.position.copy(player.pos);
+
+            // 2. IA DE JODA (PROMENADE À DISTANCE, APPEL JODA, POURSUITE, BANANE & PIÈGE)
+            if (chaser.fallingTrap) {
+                chaser.fallTimer += dt;
+                chaser.pos.x += (chaser.fallingTrap.x - chaser.pos.x) * Math.min(1, dt * 10);
+                chaser.pos.z += (chaser.fallingTrap.z - chaser.pos.z) * Math.min(1, dt * 10);
+                chaser.pos.y -= 14 * dt;
+                chaser.mesh.rotation.z += 9 * dt;
+                chaser.mesh.rotation.x += 6 * dt;
+                const scaleFactor = Math.max(0.05, 1.16 * (1 - chaser.fallTimer * 1.4));
+                chaser.mesh.scale.set(scaleFactor, scaleFactor, scaleFactor);
+                chaser.mesh.position.copy(chaser.pos);
+
+                if (chaser.fallTimer >= 0.65) {
+                    completeCurrentLevel('Joda piégé dans le trou');
+                }
+            } else {
+                const toPlayerX = player.pos.x - chaser.pos.x;
+                const toPlayerZ = player.pos.z - chaser.pos.z;
+                const distToPlayer = Math.hypot(toPlayerX, toPlayerZ);
+
+                if (distToPlayer < 8.5 && !chaser.fallingTrap) {
+                    dangerOverlayEl.classList.remove('opacity-0');
+                } else {
+                    dangerOverlayEl.classList.add('opacity-0');
+                }
+
+                // Glissade sur peau de banane
+                if (chaser.slipTimer <= 0) {
+                    for (let bIdx = bananaPeels.length - 1; bIdx >= 0; bIdx--) {
+                        const b = bananaPeels[bIdx];
+                        if (Math.hypot(chaser.pos.x - b.x, chaser.pos.z - b.z) < b.radius + chaser.radius * 0.6) {
+                            chaser.slipTimer = 2.0;
+                            sfx.playBananaSlip();
+                            spawnSplatParticles(b.x, 0.25, b.z, 0xfacc15, 16);
+                            scene.remove(b.mesh);
+                            bananaPeels.splice(bIdx, 1);
+                            showToast('Glissade sur banane !', 'Joda a glissé et perd du temps !');
+                            updateHUD();
+                            break;
+                        }
+                    }
+                }
+
+                if (chaser.slipTimer > 0) {
+                    chaser.slipTimer -= dt;
+                    chaser.mesh.rotation.z = Math.sin(chaser.slipTimer * 22) * 0.45;
+                    chaser.parts.leftArm.rotation.x = -1.2;
+                    chaser.parts.rightArm.rotation.x = 1.2;
+                } else {
+                    chaser.mesh.rotation.z *= 0.8;
+
+                    const isCalled = jodaCallTimer > 0;
+                    const isRoamingFar = !isCalled && distToPlayer > ROAM_DISTANCE && !isPointInsideHouse(player.pos.x, player.pos.z);
+
+                    let navTargetX = player.pos.x;
+                    let navTargetZ = player.pos.z;
+                    let moveSpeed = isCalled ? chaser.speed * 1.12 : chaser.speed;
+
+                    if (isRoamingFar) {
+                        moveSpeed = chaser.speed * 0.58;
+                        if (!chaser.roamTarget || Math.hypot(chaser.roamTarget.x - chaser.pos.x, chaser.roamTarget.z - chaser.pos.z) < 3.0) {
+                            const randNode = cityGraph.nodes[Math.floor(Math.random() * cityGraph.nodes.length)];
+                            chaser.roamTarget = randNode ? { x: randNode.x, z: randNode.z } : { x: 0, z: 0 };
+                        }
+                        navTargetX = chaser.roamTarget.x;
+                        navTargetZ = chaser.roamTarget.z;
+                    } else {
+                        chaser.roamTarget = null;
+                    }
+
+                    const waypoint = getNextChaseWaypoint(chaser.pos.x, chaser.pos.z, navTargetX, navTargetZ);
+                    const toWayX = waypoint.x - chaser.pos.x;
+                    const toWayZ = waypoint.z - chaser.pos.z;
+                    const wayDist = Math.hypot(toWayX, toWayZ) || 1;
+
+                    let dirX = toWayX / wayDist;
+                    let dirZ = toWayZ / wayDist;
+
+                    const prevX = chaser.pos.x;
+                    const prevZ = chaser.pos.z;
+
+                    chaser.pos.x += dirX * moveSpeed * dt;
+                    chaser.pos.z += dirZ * moveSpeed * dt;
+                    resolveObstacleCollisions(chaser.pos, chaser.radius);
+
+                    const actualMoved = Math.hypot(chaser.pos.x - prevX, chaser.pos.z - prevZ);
+                    if (actualMoved < moveSpeed * dt * 0.45) {
+                        chaser.pos.x += -dirZ * moveSpeed * 0.85 * dt;
+                        chaser.pos.z += dirX * moveSpeed * 0.85 * dt;
+                        resolveObstacleCollisions(chaser.pos, chaser.radius);
+                    }
+
+                    chaser.mesh.rotation.y = Math.atan2(dirX, dirZ);
+
+                    chaser.animTime += dt * (isRoamingFar ? 9 : 15);
+                    const cSwing = Math.sin(chaser.animTime) * (isRoamingFar ? 0.5 : 0.88);
+                    chaser.parts.leftLeg.rotation.x = cSwing;
+                    chaser.parts.rightLeg.rotation.x = -cSwing;
+                    chaser.parts.leftArm.rotation.x = -cSwing;
+
+                    chaser.dustTimer -= dt;
+                    if (chaser.dustTimer <= 0) {
+                        spawnDustParticle(chaser.pos.x, chaser.pos.z, 0xd6d3d1);
+                        chaser.dustTimer = 0.1;
+                    }
+
+                    if (chaser.throwAnimTimer > 0) {
+                        chaser.throwAnimTimer -= dt;
+                        chaser.parts.rightArm.rotation.x = -Math.PI * 0.85;
+                    } else {
+                        chaser.parts.rightArm.rotation.x = cSwing;
+                    }
+
+                    chaser.throwCooldown -= dt;
+                    if (!isRoamingFar && chaser.throwCooldown <= 0 && distToPlayer < 48 && distToPlayer > 3.5) {
+                        throwProjectile();
+                        const levelRatio = Math.min(1, (level - 1) / MAX_LEVELS);
+                        chaser.throwCooldown = Math.max(0.6, 2.05 - levelRatio * 1.42) + Math.random() * 0.25;
+                    }
+                }
+
+                chaser.mesh.position.copy(chaser.pos);
+
+                // Piège trou unique : Joda tombe dedans
+                if (activeTrapType === 'HOLE') {
+                    for (let t of traps) {
+                        const distToTrap = Math.hypot(chaser.pos.x - t.x, chaser.pos.z - t.z);
+                        if (distToTrap < t.radius * 0.84) {
+                            chaser.fallingTrap = t;
+                            chaser.fallTimer = 0;
+                            sfx.playJump();
+                            spawnSplatParticles(t.x, 0.3, t.z, 0xfbbf24, 22);
+                            break;
+                        }
+                    }
+                }
+
+                // Contact corps à corps avec Joda
+                if (!chaser.fallingTrap && distToPlayer < (player.radius + chaser.radius) * 0.92 && player.pos.y < 1.3) {
+                    triggerGameOver("Joda t'a attrapé ! Ne le laisse pas approcher !", "🤪👊");
+                    return;
+                }
+            }
+
+            // 3. MISE À JOUR DES PROJECTILES
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const p = projectiles[i];
+                p.age += dt;
+                p.vel.y += GRAVITY * dt;
+                p.mesh.position.addScaledVector(p.vel, dt);
+                p.mesh.rotation.y += 11 * dt;
+                p.mesh.rotation.x += 6 * dt;
+
+                const pCenter = new THREE.Vector3(player.pos.x, player.pos.y + 1.25, player.pos.z);
+                const distHit = p.mesh.position.distanceTo(pCenter);
+                if (distHit < p.radius + 0.65) {
+                    sfx.playSplat();
+                    spawnSplatParticles(p.mesh.position.x, p.mesh.position.y, p.mesh.position.z);
+                    scene.remove(p.mesh);
+                    projectiles.splice(i, 1);
+                    triggerGameOver("Touché par une crotte de Joda ! Tu es éliminé !", "💩🎯");
+                    return;
+                }
+
+                if (p.mesh.position.y <= 0.25 || p.age > 4.5) {
+                    if (p.mesh.position.y <= 0.25) {
+                        sfx.playSplat();
+                        spawnSplatParticles(p.mesh.position.x, 0.2, p.mesh.position.z);
+                    }
+                    scene.remove(p.mesh);
+                    projectiles.splice(i, 1);
+                }
+            }
+
+            // 4. MISE À JOUR DES PARTICULES
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const pt = particles[i];
+                pt.life -= dt;
+                pt.vel.y += GRAVITY * 0.45 * dt;
+                pt.mesh.position.addScaledVector(pt.vel, dt);
+                if (pt.mesh.position.y < 0.08) {
+                    pt.mesh.position.y = 0.08;
+                    pt.vel.y *= -0.35;
+                }
+                const s = Math.max(0.01, pt.life * 1.5);
+                pt.mesh.scale.set(s, s, s);
+                if (pt.life <= 0) {
+                    scene.remove(pt.mesh);
+                    particles.splice(i, 1);
+                }
+            }
+
+            updateCamera();
+            updateHUD();
+        }
+
+        function updateCamera() {
+            if (!player || !camera) return;
+            const targetX = player.pos.x;
+            const targetY = player.pos.y + 2.2;
+            const targetZ = player.pos.z;
+
+            const horizDist = Math.cos(cameraPitch) * cameraDistance;
+            const vertDist = Math.sin(cameraPitch) * cameraDistance;
+
+            const camX = targetX + Math.sin(cameraYaw) * horizDist;
+            const camZ = targetZ + Math.cos(cameraYaw) * horizDist;
+            const camY = Math.max(1.6, targetY + vertDist);
+
+            camera.position.lerp(new THREE.Vector3(camX, camY, camZ), 0.18);
+            camera.lookAt(targetX, targetY, targetZ);
+        }
+
+        function updateHUD() {
+            document.getElementById('hud-score').textContent = score;
+            document.getElementById('hud-level').innerHTML = `${level}<span class="text-xs opacity-65">/${MAX_LEVELS}</span>`;
+            document.getElementById('hud-stars').textContent = `⭐ ${starsBalance}`;
+            document.getElementById('hud-timer').textContent = `${levelElapsed.toFixed(1)}s`;
+            document.getElementById('hud-bananas').textContent = bananaPeelCount;
+            document.getElementById('hud-calls').textContent = jodaCallsRemaining;
+            document.getElementById('btn-call-badge').textContent = jodaCallsRemaining;
+            document.getElementById('touch-call-count').textContent = jodaCallsRemaining;
+
+            const pct = Math.round(player.stamina);
+            document.getElementById('hud-stamina-text').textContent = pct + '%';
+            document.getElementById('hud-stamina-bar').style.width = pct + '%';
+        }
+
+        function tryCloseHouseDoor() {
+            if (gameState !== 'PLAYING' || !trapHouse) return;
+            const distToDoor = Math.hypot(player.pos.x - trapHouse.doorX, player.pos.z - trapHouse.doorZ);
+            if (distToDoor > 7.5) {
+                showToast('Approche-toi de la porte !', 'Sors de la maison et approche de la porte (F / E) pour la fermer.');
+                return;
+            }
+            if (isPointInsideHouse(player.pos.x, player.pos.z)) {
+                showToast('Sors d\'abord de la maison !', 'Cours dehors avant de fermer la porte sur Joda.');
+                return;
+            }
+            setHouseDoorClosed(true);
+            if (activeTrapType === 'HOUSE' && isPointInsideHouse(chaser.pos.x, chaser.pos.z) && !chaser.fallingTrap) {
+                completeCurrentLevel('Joda enfermé dans la grande maison');
+            } else {
+                showToast('Porte fermée !', 'Joda n\'était pas dedans — la porte se réouvre dans 1,4s.');
+                setTimeout(() => {
+                    if (gameState === 'PLAYING' && trapHouse && trapHouse.doorClosed) {
+                        setHouseDoorClosed(false);
+                    }
+                }, 1400);
+            }
+        }
+
+        /**
+         * ============================================================================
+         * CONTRÔLES CLAVIER, SOURIS, TACTILE & BOUTONS UI
+         * ============================================================================
+         */
+        function triggerJump() {
+            if (gameState !== 'PLAYING') return;
+            if (player.isGrounded) {
+                player.velY = JUMP_FORCE;
+                player.isGrounded = false;
+                sfx.playJump();
+            }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Escape' || e.code === 'KeyP') {
+                if (!shopModalEl.classList.contains('hidden')) {
+                    closeShop();
+                    return;
+                }
+                if (!confirmRestartModalEl.classList.contains('hidden')) {
+                    closeRestartConfirm();
+                    return;
+                }
+                if (gameState === 'PLAYING') {
+                    setPaused(true);
+                } else if (gameState === 'PAUSED') {
+                    setPaused(false);
+                }
+                return;
+            }
+
+            switch (e.code) {
+                case 'KeyW':
+                case 'ArrowUp':
+                    keys.forward = true;
+                    break;
+                case 'KeyS':
+                case 'ArrowDown':
+                    keys.backward = true;
+                    break;
+                case 'KeyA':
+                case 'ArrowLeft':
+                    keys.left = true;
+                    break;
+                case 'KeyD':
+                case 'ArrowRight':
+                    keys.right = true;
+                    break;
+                case 'Space':
+                    e.preventDefault();
+                    triggerJump();
+                    break;
+                case 'ShiftLeft':
+                case 'ShiftRight':
+                    keys.sprint = true;
+                    break;
+                case 'KeyF':
+                case 'KeyE':
+                    e.preventDefault();
+                    tryCloseHouseDoor();
+                    break;
+                case 'KeyB':
+                    e.preventDefault();
+                    deployBananaPeel();
+                    break;
+                case 'KeyC':
+                    e.preventDefault();
+                    triggerCallJoda();
+                    break;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            switch (e.code) {
+                case 'KeyW':
+                case 'ArrowUp':
+                    keys.forward = false;
+                    break;
+                case 'KeyS':
+                case 'ArrowDown':
+                    keys.backward = false;
+                    break;
+                case 'KeyA':
+                case 'ArrowLeft':
+                    keys.left = false;
+                    break;
+                case 'KeyD':
+                case 'ArrowRight':
+                    keys.right = false;
+                    break;
+                case 'ShiftLeft':
+                case 'ShiftRight':
+                    keys.sprint = false;
+                    break;
+            }
+        });
+
+        const canvasEl = document.getElementById('game-canvas');
+        canvasEl.addEventListener('mousedown', (e) => {
+            isDraggingCamera = true;
+            lastPointerX = e.clientX;
+            lastPointerY = e.clientY;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDraggingCamera) return;
+            const dx = e.clientX - lastPointerX;
+            const dy = e.clientY - lastPointerY;
+            lastPointerX = e.clientX;
+            lastPointerY = e.clientY;
+            cameraYaw -= dx * 0.0065;
+            cameraPitch = Math.max(0.16, Math.min(1.15, cameraPitch + dy * 0.005));
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDraggingCamera = false;
+        });
+
+        const joystickZone = document.getElementById('joystick-zone');
+        const joystickKnob = document.getElementById('joystick-knob');
+        let joystickTouchId = null;
+        const maxJoystickRadius = 42;
+
+        function updateJoystick(clientX, clientY) {
+            const rect = joystickZone.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            let dx = clientX - centerX;
+            let dy = clientY - centerY;
+            const dist = Math.hypot(dx, dy);
+            if (dist > maxJoystickRadius) {
+                dx = (dx / dist) * maxJoystickRadius;
+                dy = (dy / dist) * maxJoystickRadius;
+            }
+            joystickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+            touchMove.x = dx / maxJoystickRadius;
+            touchMove.y = dy / maxJoystickRadius;
+        }
+
+        function resetJoystick() {
+            joystickTouchId = null;
+            joystickKnob.style.transform = 'translate(0px, 0px)';
+            touchMove.x = 0;
+            touchMove.y = 0;
+        }
+
+        joystickZone.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            sfx.init();
+            const touch = e.changedTouches[0];
+            joystickTouchId = touch.identifier;
+            updateJoystick(touch.clientX, touch.clientY);
+        }, { passive: false });
+
+        window.addEventListener('touchmove', (e) => {
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const t = e.changedTouches[i];
+                if (t.identifier === joystickTouchId) {
+                    e.preventDefault();
+                    updateJoystick(t.clientX, t.clientY);
+                } else if (t.identifier === activeCameraTouchId) {
+                    const dx = t.clientX - lastPointerX;
+                    const dy = t.clientY - lastPointerY;
+                    lastPointerX = t.clientX;
+                    lastPointerY = t.clientY;
+                    cameraYaw -= dx * 0.0075;
+                    cameraPitch = Math.max(0.16, Math.min(1.15, cameraPitch + dy * 0.006));
+                }
+            }
+        }, { passive: false });
+
+        window.addEventListener('touchend', (e) => {
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const t = e.changedTouches[i];
+                if (t.identifier === joystickTouchId) {
+                    resetJoystick();
+                } else if (t.identifier === activeCameraTouchId) {
+                    activeCameraTouchId = null;
+                }
+            }
+        });
+
+        canvasEl.addEventListener('touchstart', (e) => {
+            if (activeCameraTouchId === null && e.changedTouches.length > 0) {
+                const t = e.changedTouches[0];
+                if (t.identifier !== joystickTouchId) {
+                    activeCameraTouchId = t.identifier;
+                    lastPointerX = t.clientX;
+                    lastPointerY = t.clientY;
+                }
+            }
+        }, { passive: true });
+
+        const btnTouchJump = document.getElementById('btn-touch-jump');
+        btnTouchJump.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            btnTouchJump.classList.add('active');
+            triggerJump();
+        }, { passive: false });
+        btnTouchJump.addEventListener('touchend', () => btnTouchJump.classList.remove('active'));
+        btnTouchJump.addEventListener('mousedown', () => triggerJump());
+
+        const btnTouchSprint = document.getElementById('btn-touch-sprint');
+        btnTouchSprint.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            btnTouchSprint.classList.add('active');
+            touchSprint = true;
+        }, { passive: false });
+        btnTouchSprint.addEventListener('touchend', () => {
+            btnTouchSprint.classList.remove('active');
+            touchSprint = false;
+        });
+        btnTouchSprint.addEventListener('mousedown', () => touchSprint = true);
+        btnTouchSprint.addEventListener('mouseup', () => touchSprint = false);
+
+        document.getElementById('btn-touch-door').addEventListener('click', tryCloseHouseDoor);
+        document.getElementById('btn-touch-banana').addEventListener('click', deployBananaPeel);
+        document.getElementById('btn-touch-call').addEventListener('click', triggerCallJoda);
+        document.getElementById('btn-call-joda').addEventListener('click', triggerCallJoda);
+
+        document.getElementById('btn-start').addEventListener('click', startNewGame);
+        document.getElementById('btn-restart').addEventListener('click', startNewGame);
+
+        document.getElementById('btn-shop-hud').addEventListener('click', openShop);
+        document.getElementById('btn-shop-start').addEventListener('click', openShop);
+        document.getElementById('btn-shop-pause').addEventListener('click', openShop);
+        document.getElementById('btn-shop-gameover').addEventListener('click', openShop);
+        document.getElementById('btn-close-shop').addEventListener('click', closeShop);
+
+        document.getElementById('btn-buy-sprint').addEventListener('click', () => {
+            const cost = getSprintUpgradeCost();
+            if (starsBalance >= cost && sprintUpgradeLevel < 15) {
+                starsBalance -= cost;
+                sprintUpgradeLevel++;
+                if (player) {
+                    player.sprintSpeed = getPlayerSprintSpeed();
+                }
+                saveProgress();
+                updateShopUI();
+                updateHUD();
+                sfx.playJump();
+            }
+        });
+
+        document.getElementById('btn-buy-banana').addEventListener('click', () => {
+            if (starsBalance >= 1) {
+                starsBalance -= 1;
+                bananaPeelCount += 1;
+                saveProgress();
+                updateShopUI();
+                updateHUD();
+                sfx.playJump();
+            }
+        });
+
+        document.getElementById('btn-theme-hud').addEventListener('click', () => applyTheme(!isDarkMode));
+        document.getElementById('btn-theme-start').addEventListener('click', () => applyTheme(!isDarkMode));
+
+        document.getElementById('btn-pause').addEventListener('click', () => setPaused(true));
+        document.getElementById('btn-resume').addEventListener('click', () => setPaused(false));
+
+        document.getElementById('btn-restart-hud').addEventListener('click', openRestartConfirm);
+        document.getElementById('btn-pause-restart').addEventListener('click', openRestartConfirm);
+        document.getElementById('btn-cancel-restart').addEventListener('click', closeRestartConfirm);
+        document.getElementById('btn-confirm-restart').addEventListener('click', () => {
+            closeRestartConfirm();
+            startNewGame();
+        });
+
+        document.getElementById('btn-mute').addEventListener('click', () => {
+            sfx.init();
+            const isMuted = sfx.toggleMute();
+            document.getElementById('mute-icon').textContent = isMuted ? '🔇' : '🔊';
+        });
+
+        /**
+         * ============================================================================
+         * DÉMARRAGE APRÈS CHARGEMENT DE LA FENÊTRE
+         * ============================================================================
+         */
+        function animateLoop() {
+            requestAnimationFrame(animateLoop);
+            const dt = Math.min(clock.getDelta(), 0.05);
+            update(dt);
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
+        }
+
+        window.onload = function () {
+            initScene();
+            updateHUD();
+            animateLoop();
+        };
+    </script>
+</body>
+</html>
